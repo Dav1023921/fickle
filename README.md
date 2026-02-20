@@ -1,1 +1,2 @@
 # fickle
+For my final year dissertation I wanted to explore how artificial intelligence can automise manual mundane tasks and in particular be applied into an area such as pathology where the use of AI can relieve the current pressures faced by pathologists and help make workflow more efficient. Fickle is a decision support system that is used for analysis of umbilical cord cross section slides and is an example of how AI can be implemented for semi-automation and a potential example of full automation. 
