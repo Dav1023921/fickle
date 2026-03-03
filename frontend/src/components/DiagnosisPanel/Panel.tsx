@@ -6,7 +6,7 @@ import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import Diagnosis from './Diagnosis';
 import PredictionLabel from './PredictionLabel';
-
+import ArteryLabel from './ArteryLabel';
 
 const style = {
   py: 0,
@@ -34,7 +34,9 @@ const Panel = () => {
         <Stack direction="column" spacing={1}>
           <Typography gutterBottom variant="body2">
           Diagnosis Details
-        </Typography>
+          </Typography>
+          <ArteryLabel label="Number of Arteries" />
+          <ArteryLabel label="Presence of vein" />
         </Stack>
       </Box>
       <Divider variant="middle"/>
