@@ -25,6 +25,13 @@ color_map = {
     (166,24,93): 2 # Vein
 }
 
+rgb_to_cls = {
+    (0, 0, 0): 0,
+    (56, 37, 158): 1,
+    (166, 24, 93): 2,
+}
+
+
 def rgb_to_mask(mask_rgb, color_map):
     h, w, _ = mask_rgb.shape
 

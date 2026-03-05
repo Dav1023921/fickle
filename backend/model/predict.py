@@ -8,6 +8,13 @@ from dataset import pad_to_1024
 
 
 
+rgb_to_cls = {
+    (0, 0, 0): 0,
+    (56, 37, 158): 1,
+    (166, 24, 93): 2,
+}
+cls_to_rgb = {v: k for k, v in rgb_to_cls.items()}
+
 def mask_to_rgb(mask, color_map):
     h, w = mask.shape
     rgb = np.zeros((h, w, 3), dtype=np.uint8)
@@ -16,25 +23,20 @@ def mask_to_rgb(mask, color_map):
     return rgb
 
 
-
 model = make_model()
 model.load_state_dict(torch.load("unet_resnet34.pth"))
 model.eval()
 
 
-
-
 # Load image
-img = Image.open("test_image.jpg").convert("RGB")
-pad_to_1024(img, fill=0)
+img = Image.open("../dataset/images/case59.jpg").convert("RGB")
 
-
-# Apply SAME transforms used in training (except augmentations)
 transform = T.Compose([
     T.ToTensor(),
 ])
 
-x = transform(img).unsqueeze(0)  # (1,3,H,W)
+x = transform(img).unsqueeze(0)   # (1, 3, H, W)
+x = pad_to_1024(x, fill=0)        # only if pad_to_1024 expects a tensor with .shape
 
 with torch.no_grad():
     logits = model(x)
@@ -42,5 +44,5 @@ with torch.no_grad():
 
 mask = preds.squeeze(0).cpu().numpy()
 
-rgb_mask = mask_to_rgb(mask, color_map)
+rgb_mask = mask_to_rgb(mask, cls_to_rgb)
 Image.fromarray(rgb_mask).save("prediction.png")
