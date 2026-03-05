@@ -16,10 +16,10 @@ const ArteryLabel = ({ label }: ArteryLabelProps) => {
                    {label}
             </Typography>
         <Select
-          labelId="demo-simple-select-label"
-          id="demo-simple-select"
           sx={{
             height:30,
+            width:80,
+            fontSize: 12,
              }}
         >
           <MenuItem value={10}>One</MenuItem>

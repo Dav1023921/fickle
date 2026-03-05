@@ -1,0 +1,4 @@
+# label:color_rgb:parts:actions
+artery:56,37,158::
+background:0,0,0::
+vein:166,24,93::

@@ -1,12 +1,12 @@
 import Card from '@mui/material/Card';
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import Diagnosis from './Diagnosis';
 import PredictionLabel from './PredictionLabel';
 import ArteryLabel from './ArteryLabel';
+import VesselLabel from './VesselLabel';
 
 const style = {
   py: 0,
@@ -42,13 +42,9 @@ const Panel = () => {
       <Divider variant="middle"/>
       <Box sx={{ p: 2 }}>
         <Typography gutterBottom variant="body2">
-          Select type
+          Vessel Diameters
         </Typography>
-        <Stack direction="row" spacing={1}>
-          <Chip color="primary" label="Soft" size="small" />
-          <Chip label="Medium" size="small" />
-          <Chip label="Hard" size="small" />
-        </Stack>
+        <VesselLabel />
       </Box>
     </Card>
   );

@@ -7,7 +7,7 @@ const Navbar = () => {
   return (
       <AppBar position="sticky" sx={{ bgcolor: "primary.dark" }}>
         <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 , fontFamily: "Sans-serif"}}>
             Fickle
           </Typography>
           <Button color="inherit">Upload</Button>

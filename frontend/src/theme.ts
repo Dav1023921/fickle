@@ -23,7 +23,7 @@ export const theme = createTheme({
    
   },
   typography: {
-    fontFamily: "Inter, sans-serif",
+    fontFamily: "Inter, sans-serif, Arial, Poppins",
     h3: {
         fontSize: '1.5rem'
     },
