@@ -3,10 +3,6 @@ import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
-import Diagnosis from './Diagnosis';
-import PredictionLabel from './PredictionLabel';
-import ArteryLabel from './ArteryLabel';
-import VesselLabel from './VesselLabel';
 
 const style = {
   py: 0,
@@ -19,14 +15,13 @@ const style = {
   backgroundColor: 'background.paper',
 };
 
-const Panel = () => {
+const ToolPanel = () => {
   return (
      <Card variant="outlined" sx={style}>
   
       <Box>
         <Stack spacing={2}>
-          <Diagnosis />
-          <PredictionLabel />
+          <Typography>Actions</Typography>
           </Stack>
       </Box>
       <Divider variant="middle"/>
@@ -35,8 +30,6 @@ const Panel = () => {
           <Typography gutterBottom variant="body2">
           Diagnosis Details
           </Typography>
-          <ArteryLabel label="Number of Arteries" menuItemOne='One' menuItemTwo='Two'/>
-          <ArteryLabel label="Presence of vein" menuItemOne='True' menuItemTwo='False'/>
         </Stack>
       </Box>
       <Divider variant="middle"/>
@@ -44,11 +37,10 @@ const Panel = () => {
         <Typography gutterBottom variant="body2">
           Vessel Diameters
         </Typography>
-        <VesselLabel />
       </Box>
     </Card>
   );
 };
 
-export default Panel;
+export default ToolPanel;
 

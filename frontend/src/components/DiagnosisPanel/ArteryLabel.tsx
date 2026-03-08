@@ -5,10 +5,12 @@ import MenuItem from '@mui/material/MenuItem';
 
 type ArteryLabelProps = {
   label: string
+  menuItemOne: string
+  menuItemTwo: string
 }
 
 
-const ArteryLabel = ({ label }: ArteryLabelProps) => {
+const ArteryLabel = ({ label, menuItemOne, menuItemTwo }: ArteryLabelProps) => {
     return (
        <Box pt={1}>
         <Stack direction={"row"} sx={{justifyContent: "space-between"}}>
@@ -22,8 +24,8 @@ const ArteryLabel = ({ label }: ArteryLabelProps) => {
             fontSize: 12,
              }}
         >
-          <MenuItem value={10}>One</MenuItem>
-          <MenuItem value={20}>Two</MenuItem>
+          <MenuItem value={10}>{menuItemOne}</MenuItem>
+          <MenuItem value={20}>{menuItemTwo}</MenuItem>
         </Select>
 
             

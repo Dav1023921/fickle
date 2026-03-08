@@ -42,8 +42,15 @@ n_train = int(0.8 * n)
 n_test = n - n_train
 train_set, test_set = random_split(dataset, [n_train, n_test])
 
+# Move to gpu
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+print(f"Using {device} device")
+
 # Initialise an instance of the model
 model = make_model()
+
+model = model.to(device)
+
 
 # Hyperparameters
 learning_rate = 1e-3
@@ -61,6 +68,11 @@ def train_loop(train_dataloader, model, optimizer):
      model.train()
 
      for batch, (X, y) in enumerate(train_dataloader):
+        # Reset gradients for no confliccts
+        optimizer.zero_grad()
+        # Move data to device
+        X = X.to(device)
+        y = y.to(device)
         # Compute prediction and loss
         pred = model(X)
         print("Batch processed")
@@ -84,6 +96,8 @@ def test_loop(test_dataloader, model):
 
     with torch.no_grad():
         for X, y in test_dataloader:
+            X = X.to(device)
+            y = y.to(device)
             logits = model(X)   
             preds = torch.argmax(logits, dim=1)
             iou_metric.update(preds, y)
