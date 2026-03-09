@@ -4,29 +4,25 @@ import numpy as np
 import torch
 from PIL import Image
 import torch.nn.functional as F
+from torchvision.transforms import RandomCrop
+from torchvision.transforms import functional as F
 
-# Required transformation for the image transform *todo*
 
-def pad_to_1024(x, fill=0):
-    h, w = x.shape[-2], x.shape[-1]
+# We implement the dataset here, where I will try and do a patch based segmentation system
+# as the initial dataset is quite large.
 
-    pad_h = 1024 - h
-    pad_w = 1024 - w
-
-    if pad_h < 0 or pad_w < 0:
-        raise ValueError(f"Image size ({h}, {w}) larger than 1024")
-
-    # (left, right, top, bottom)
-    return F.pad(x, (0, pad_w, 0, pad_h), value=fill)
+def pad_to_512(img, width, height, fill):
+    pad_w = max(0, 512 - width)
+    pad_h = max(0, 512 - height)
+    # pad the image
+    img = F.pad(img, (0, 0, pad_w, pad_h), fill=fill)
+    return img
 
 color_map = {
     (0, 0, 0): 0, # Background
     (56,37,158): 1, # Artery 
     (166,24,93): 2 # Vein
 }
-
-
-
 
 def rgb_to_mask(mask_rgb, color_map):
     h, w, _ = mask_rgb.shape
@@ -51,9 +47,19 @@ class FickDataSet(Dataset):
         return len(self.img_paths)
 
     def __getitem__(self, idx):
-        img = Image.open(self.img_paths[idx]).convert("RGB")
+        # patching dimensions
+        dim = 512
 
+        # Converting images into RGB
+        img = Image.open(self.img_paths[idx]).convert("RGB")
         mask_rgb = Image.open(self.mask_paths[idx]).convert("RGB")
+        # Pad if necessary
+        width, height = img.size
+        img = pad_to_512(img, width, height, 0)
+        mask_rgb = pad_to_512(mask_rgb,width, height,  0)
+
+
+        # Converting an RGB mask to segmentation Mask
         mask_rgb = np.array(mask_rgb, dtype=np.uint8)
         mask = rgb_to_mask(mask_rgb, color_map)
         mask = torch.from_numpy(mask).long()
@@ -61,8 +67,10 @@ class FickDataSet(Dataset):
         if self.img_tf:
             img = self.img_tf(img)
 
-        img = pad_to_1024(img, fill=0)
-        mask = pad_to_1024(mask, fill=255)  # important for CE loss
+        # Return a random crop of the image and the corresponding crop of the mask
+        i, j, h, w = RandomCrop.get_params(img, output_size=(dim, dim))
+        img = F.crop(img, i, j, h, w)
+        mask = F.crop(img, i, j, h, w)
 
         return img, mask
 

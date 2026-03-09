@@ -1,20 +1,6 @@
 import './App.css'
-import Panel from "./components/DiagnosisPanel";
-import Navbar from './components/Navbar';
-import Viewer from './components/ImageViewer'
+import { Outlet } from "react-router-dom";
 
-function App() {
-  return (
-    <>
-      <Navbar />
-      <div style={{ display: "flex", flexDirection: "row" , gap: "50px",
-          margin: "50px",}}>
-        <Viewer />
-        <Panel />
-        
-      </div>
-    </>
-  )
+export default function App() {
+  return <Outlet />;
 }
-
-export default App

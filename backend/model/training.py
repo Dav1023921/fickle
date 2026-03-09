@@ -42,28 +42,29 @@ n_train = int(0.8 * n)
 n_test = n - n_train
 train_set, test_set = random_split(dataset, [n_train, n_test])
 
-# Move to gpu
+# # Move to gpu
 device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
 print(f"Using {device} device")
 
 # Initialise an instance of the model
 model = make_model()
 
-model = model.to(device)
+# model = model.to(device)
 
 
 # Hyperparameters
 learning_rate = 1e-3
-batch_size = 5
-epochs = 5
+batch_size = 10
+epochs = 20
 # Loss function and optimizer
-loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+loss_fn = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
 
 # Creating Dataloader
 train_dataloader = DataLoader(train_set, batch_size=5, shuffle=True)
 test_dataloader = DataLoader(test_set, batch_size=5, shuffle=False)
 
+# Training 
 def train_loop(train_dataloader, model, optimizer):
      model.train()
 
@@ -71,8 +72,8 @@ def train_loop(train_dataloader, model, optimizer):
         # Reset gradients for no confliccts
         optimizer.zero_grad()
         # Move data to device
-        X = X.to(device)
-        y = y.to(device)
+        # X = X.to(device)
+        # y = y.to(device)
         # Compute prediction and loss
         pred = model(X)
         print("Batch processed")
@@ -82,22 +83,20 @@ def train_loop(train_dataloader, model, optimizer):
         optimizer.step()
         optimizer.zero_grad()
 
-    
-num_classes = 3
-ignore_index = 255
+# Evaluation metrics
+iou_metric  = MulticlassJaccardIndex(num_classes=3, ignore_index=255)
+dice_metric = MulticlassF1Score(num_classes=3, average="macro", ignore_index=255)
 
-iou_metric  = MulticlassJaccardIndex(num_classes=num_classes, ignore_index=ignore_index)
-dice_metric = MulticlassF1Score(num_classes=num_classes, average="macro", ignore_index=ignore_index)
-
-
+# Testing
 def test_loop(test_dataloader, model):
+    # Reset the metric in memory
     iou_metric.reset()
     dice_metric.reset()
 
     with torch.no_grad():
         for X, y in test_dataloader:
-            X = X.to(device)
-            y = y.to(device)
+            # X = X.to(device)
+            # y = y.to(device)
             logits = model(X)   
             preds = torch.argmax(logits, dim=1)
             iou_metric.update(preds, y)
@@ -113,6 +112,7 @@ for t in range(epochs):
     train_loop(train_dataloader, model, optimizer)
     test_loop(test_dataloader, model)
 
+# Save the model state for prediction
 torch.save(model.state_dict(), "unet_resnet34.pth")
 
 print("Done!")
