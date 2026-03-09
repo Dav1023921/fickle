@@ -10,7 +10,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate to="/cases" replace />,
+        element: <HomePage />,
       },
       {
         path: "home",

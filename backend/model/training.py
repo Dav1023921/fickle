@@ -9,8 +9,30 @@ from dataset import FickDataSet
 import os
 from torch.utils.data import random_split
 from torchmetrics.classification import MulticlassJaccardIndex, MulticlassF1Score
+import torch.nn.functional as F
 
 # This code here still needs a lot of modification
+
+# Metric code
+
+def dice_loss(logits, targets, num_classes, eps=1e-6):
+    # logits: (N, C, H, W)
+    # targets: (N, H, W)
+
+    probs = torch.softmax(logits, dim=1)
+
+    targets_onehot = F.one_hot(targets, num_classes=num_classes)
+    targets_onehot = targets_onehot.permute(0, 3, 1, 2).float()
+
+    dims = (0, 2, 3)
+
+    intersection = torch.sum(probs * targets_onehot, dims)
+    union = torch.sum(probs + targets_onehot, dims)
+
+    dice = (2 * intersection + eps) / (union + eps)
+
+    return 1 - dice.mean()
+
 
 # Instantiate the Dataset
 
@@ -43,8 +65,8 @@ n_test = n - n_train
 train_set, test_set = random_split(dataset, [n_train, n_test])
 
 # # Move to gpu
-device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
-print(f"Using {device} device")
+# device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+# print(f"Using {device} device")
 
 # Initialise an instance of the model
 model = make_model()
@@ -54,15 +76,22 @@ model = make_model()
 
 # Hyperparameters
 learning_rate = 1e-3
-batch_size = 10
-epochs = 20
+batch_size = 8
+epochs = 70
 # Loss function and optimizer
-loss_fn = torch.nn.CrossEntropyLoss()
+class_weights = [0.2, 2.5, 2.5]
+loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights)
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
+
 
 # Creating Dataloader
 train_dataloader = DataLoader(train_set, batch_size=5, shuffle=True)
 test_dataloader = DataLoader(test_set, batch_size=5, shuffle=False)
+
+# Evaluation metrics
+iou_metric  = MulticlassJaccardIndex(num_classes=3, ignore_index=255)
+dice_metric = MulticlassF1Score(num_classes=3, average="macro", ignore_index=255)
+
 
 # Training 
 def train_loop(train_dataloader, model, optimizer):
@@ -75,20 +104,26 @@ def train_loop(train_dataloader, model, optimizer):
         # X = X.to(device)
         # y = y.to(device)
         # Compute prediction and loss
+        print(y.shape)
+        if y.ndim == 4:
+            y = torch.argmax(y, dim=1)
+        y = y.long()
         pred = model(X)
         print("Batch processed")
-        loss = loss_fn(pred, y)
+
+        # Loss
+        dl = dice_loss(pred, y, num_classes=3)
+        loss = loss_fn(pred, y) + dl
+        
         # Backpropagation
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        optimizer.zero_grad()
 
-# Evaluation metrics
-iou_metric  = MulticlassJaccardIndex(num_classes=3, ignore_index=255)
-dice_metric = MulticlassF1Score(num_classes=3, average="macro", ignore_index=255)
 
 # Testing
 def test_loop(test_dataloader, model):
+    model.eval()
     # Reset the metric in memory
     iou_metric.reset()
     dice_metric.reset()
@@ -99,6 +134,7 @@ def test_loop(test_dataloader, model):
             # y = y.to(device)
             logits = model(X)   
             preds = torch.argmax(logits, dim=1)
+            y = torch.argmax(y, dim=1)
             iou_metric.update(preds, y)
             dice_metric.update(preds, y)
 
