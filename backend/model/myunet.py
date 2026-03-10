@@ -7,7 +7,7 @@ def make_model():
         encoder_name="resnet34",
         encoder_weights="imagenet",
         in_channels=3,
-        classes=3,
+        classes=4,
     )
     return model
 

@@ -12,6 +12,8 @@ rgb_to_cls = {
     (0, 0, 0): 0,
     (56, 37, 158): 1,
     (166, 24, 93): 2,
+    (13, 4, 72): 3,
+
 }
 cls_to_rgb = {v: k for k, v in rgb_to_cls.items()}
 
@@ -36,7 +38,7 @@ transform = T.Compose([
 ])
 
 x = transform(img).unsqueeze(0)   # (1, 3, H, W)
-x = pad_to_1024(x, fill=0)        # only if pad_to_1024 expects a tensor with .shape
+# x = pad_to_1024(x, fill=0)        # only if pad_to_1024 expects a tensor with .shape
 
 with torch.no_grad():
     logits = model(x)

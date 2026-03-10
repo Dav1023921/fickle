@@ -21,7 +21,10 @@ def pad_to_512(img, width, height, fill):
 color_map = {
     (0, 0, 0): 0, # Background
     (56,37,158): 1, # Artery 
-    (166,24,93): 2 # Vein
+    (166,24,93): 2, # Vein
+    (13, 4, 72): 3, # Vessel
+    (61, 245, 61): 255 # Ignore
+
 }
 
 def rgb_to_mask(mask_rgb, color_map):

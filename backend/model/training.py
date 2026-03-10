@@ -15,23 +15,23 @@ import torch.nn.functional as F
 
 # Metric code
 
-def dice_loss(logits, targets, num_classes, eps=1e-6):
-    # logits: (N, C, H, W)
-    # targets: (N, H, W)
+# def dice_loss(logits, targets, num_classes, eps=1e-6):
+#     # logits: (N, C, H, W)
+#     # targets: (N, H, W)
 
-    probs = torch.softmax(logits, dim=1)
+#     probs = torch.softmax(logits, dim=1)
 
-    targets_onehot = F.one_hot(targets, num_classes=num_classes)
-    targets_onehot = targets_onehot.permute(0, 3, 1, 2).float()
+#     targets_onehot = F.one_hot(targets, num_classes=num_classes)
+#     targets_onehot = targets_onehot.permute(0, 3, 1, 2).float()
 
-    dims = (0, 2, 3)
+#     dims = (0, 2, 3)
 
-    intersection = torch.sum(probs * targets_onehot, dims)
-    union = torch.sum(probs + targets_onehot, dims)
+#     intersection = torch.sum(probs * targets_onehot, dims)
+#     union = torch.sum(probs + targets_onehot, dims)
 
-    dice = (2 * intersection + eps) / (union + eps)
+#     dice = (2 * intersection + eps) / (union + eps)
 
-    return 1 - dice.mean()
+#     return 1 - dice.mean()
 
 
 # Instantiate the Dataset
@@ -75,12 +75,12 @@ model = make_model()
 
 
 # Hyperparameters
-learning_rate = 1e-3
-batch_size = 8
+learning_rate = 1e-4
+batch_size = 5
 epochs = 70
 # Loss function and optimizer
-class_weights = [0.2, 2.5, 2.5]
-loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights)
+class_weights = torch.tensor([0.5, 2.5, 2.5, 1.0])
+loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
 
 
@@ -89,8 +89,8 @@ train_dataloader = DataLoader(train_set, batch_size=5, shuffle=True)
 test_dataloader = DataLoader(test_set, batch_size=5, shuffle=False)
 
 # Evaluation metrics
-iou_metric  = MulticlassJaccardIndex(num_classes=3, ignore_index=255)
-dice_metric = MulticlassF1Score(num_classes=3, average="macro", ignore_index=255)
+iou_metric  = MulticlassJaccardIndex(num_classes=4, ignore_index=255)
+dice_metric = MulticlassF1Score(num_classes=4, average="macro", ignore_index=255)
 
 
 # Training 
@@ -104,7 +104,6 @@ def train_loop(train_dataloader, model, optimizer):
         # X = X.to(device)
         # y = y.to(device)
         # Compute prediction and loss
-        print(y.shape)
         if y.ndim == 4:
             y = torch.argmax(y, dim=1)
         y = y.long()
@@ -112,8 +111,8 @@ def train_loop(train_dataloader, model, optimizer):
         print("Batch processed")
 
         # Loss
-        dl = dice_loss(pred, y, num_classes=3)
-        loss = loss_fn(pred, y) + dl
+        # dl = dice_loss(pred, y, num_classes=3)
+        loss = loss_fn(pred, y) 
         
         # Backpropagation
         optimizer.zero_grad()
