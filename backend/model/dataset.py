@@ -59,7 +59,7 @@ class FickDataSet(Dataset):
         # Pad if necessary
         width, height = img.size
         img = pad_to_512(img, width, height, 0)
-        mask_rgb = pad_to_512(mask_rgb,width, height,  0)
+        mask_rgb = pad_to_512(mask_rgb,width, height, (61,245,61))
 
 
         # Converting an RGB mask to segmentation Mask

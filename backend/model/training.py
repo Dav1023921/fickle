@@ -40,7 +40,7 @@ import torch.nn.functional as F
 img_dir = "../dataset/images"
 mask_dir = "../dataset/masks"
 
-img_files = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(".jpg")])
+img_files = sorted([f for f in os.listdir(img_dir)])
 
 img_paths, mask_paths = [], []
 for f in img_files:
