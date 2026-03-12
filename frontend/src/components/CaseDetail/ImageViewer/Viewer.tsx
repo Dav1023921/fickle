@@ -5,7 +5,7 @@ import Konva from "konva";
 import { useRef } from "react";
 
 
-const stageRef = useRef<Konva.Stage | null>(null);
+// const stageRef = useRef<Konva.Stage | null>(null);
 
 // const scaleImage = () => {
 //     const stage = stageRef.current;
@@ -27,7 +27,7 @@ const URLImage = ({ src, ...rest }: URLImageProps) => {
 const Viewer = () => {
   return (
     <div style={{ border: "2px solid black", width: "600px", height: "600px" ,padding: "10px"}}>
-        <Stage width={580} height={580} ref={stageRef}>
+        <Stage width={580} height={580}>
         <Layer>
             <URLImage src={case257} x={150} y={150} />
         </Layer>

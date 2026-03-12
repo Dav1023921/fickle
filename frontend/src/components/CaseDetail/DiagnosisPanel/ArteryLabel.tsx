@@ -1,5 +1,4 @@
-import Box from '@mui/material/Box';
-import { Stack, Typography } from '@mui/material';
+import { Box,  Typography } from '@mui/material';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 
@@ -12,8 +11,7 @@ type ArteryLabelProps = {
 
 const ArteryLabel = ({ label, menuItemOne, menuItemTwo }: ArteryLabelProps) => {
     return (
-       <Box pt={1}>
-        <Stack direction={"row"} sx={{justifyContent: "space-between"}}>
+        <Box sx={{display: "flex",justifyContent: "space-between", pl:2, pr:2}}>
             <Typography variant="h4">
                    {label}
             </Typography>
@@ -30,8 +28,7 @@ const ArteryLabel = ({ label, menuItemOne, menuItemTwo }: ArteryLabelProps) => {
 
             
             
-        </Stack>
-       </Box>
+        </Box>
     )
 }
 

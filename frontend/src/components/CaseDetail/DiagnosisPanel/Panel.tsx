@@ -22,19 +22,14 @@ const style = {
 const Panel = () => {
   return (
      <Card variant="outlined" sx={style}>
-  
-      <Box>
-        <Stack spacing={2}>
-          <Diagnosis />
+      <Diagnosis />
+      <Box sx={{ p: 2 , display: 'flex', justifyContent: 'center'}}>
           <PredictionLabel />
-          </Stack>
       </Box>
       <Divider variant="middle"/>
       <Box sx={{ p: 2 }}>
-        <Stack direction="column" spacing={1}>
-          <Typography gutterBottom variant="body2">
-          Diagnosis Details
-          </Typography>
+        <Stack direction="column" spacing={2}>
+          <Typography gutterBottom variant="body2">Diagnosis Details</Typography>
           <ArteryLabel label="Number of Arteries" menuItemOne='One' menuItemTwo='Two'/>
           <ArteryLabel label="Presence of vein" menuItemOne='True' menuItemTwo='False'/>
         </Stack>
