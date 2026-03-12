@@ -40,7 +40,7 @@ import torch.nn.functional as F
 img_dir = "../dataset/images"
 mask_dir = "../dataset/masks"
 
-img_files = sorted([f for f in os.listdir(img_dir)])
+img_files = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(".jpg")])
 
 img_paths, mask_paths = [], []
 for f in img_files:
@@ -98,6 +98,8 @@ def train_loop(train_dataloader, model, optimizer):
      model.train()
 
      for batch, (X, y) in enumerate(train_dataloader):
+        # print(X.shape)
+        # print(y.shape)
         # Reset gradients for no confliccts
         optimizer.zero_grad()
         # Move data to device
@@ -133,7 +135,7 @@ def test_loop(test_dataloader, model):
             # y = y.to(device)
             logits = model(X)   
             preds = torch.argmax(logits, dim=1)
-            y = torch.argmax(y, dim=1)
+            
             iou_metric.update(preds, y)
             dice_metric.update(preds, y)
 

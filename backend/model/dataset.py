@@ -73,7 +73,7 @@ class FickDataSet(Dataset):
         # Return a random crop of the image and the corresponding crop of the mask
         i, j, h, w = RandomCrop.get_params(img, output_size=(dim, dim))
         img = F.crop(img, i, j, h, w)
-        mask = F.crop(img, i, j, h, w)
+        mask = F.crop(mask, i, j, h, w)
 
         return img, mask
 
