@@ -1,0 +1,52 @@
+Psuedocode:
+Input → Image
+
+Image → Model 1 → Instances
+For instance in instances make → 
+Output = [{Cord 1, Crop}, {Cord 2, Crop}, {Cord 3, Crop}]
+
+For Cord in output:
+    Cord[Crop] → Model 2 → Vessel Instances Crops ->
+
+    Output = [{Vessel 1, Crop, Component, {Contour Vector:Name}, {Contour Vector:name}, {Contour Vector:name}}, {Vessel 2, Crop, Component}, {Vessel 3, Crop, Component}]
+    Cord.append(Vessel Number)
+    vessels_found = []
+    probabilites_found = []
+    For vessel in Output
+        Crop -> Resnet Frozen Encoder -> CNN Features
+        Morphology Features -> []
+        
+        CNN Features + Morphology Features -> MLP Model -> [Artery or Vein] with [Probability, Probability]
+        vessels_found.append()
+        probabilites_found.append()
+
+    For vessel in vessels_found:
+        Ascertain that:
+            If: 3 vessels (2 arteries, 1 vein) cord.append(Normal)
+            If: 2 vessels (1 artery, 1 vein) cord.append(SUA)
+            Else: cord.append(Uncertain)
+
+For Cord in Cord:
+    If atleast 1 Cord: report Normal 
+
+
+Output -> SUA/NO SUA, Artery and Vein and Vessel Contours, Confidence, Artery/Vein Diameter/Perimeter, Number of vessels
+
+
+
+Model 3 Training Data
+
+
+
+[Features of one vessel] : Training Label
+
+Justifying human in the loop so things like
+2 veins 1 artery uncertain so the human needs to update
+
+There will never be 100% Accuracy so the full pipeline also involves a human in the loop stage 
+Can compensate machine learnig prediction errors with human in the loop and pathologist manual design
+Quantification, pathology, layers, regions
+
+Contouring about nuetrophil location whether in wharton jelly, 
+set work in larger vision, amsterdamn consensus , reporting of the placenta. we are just dealing with one chunk of the problem but part of the larger vision to reporting of pethomics.
+Research findings changed way of reporting, solid quantified criteria for reporting
