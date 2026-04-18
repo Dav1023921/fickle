@@ -1,3 +1,6 @@
 *.pth
 *.npy
 node_modules/
+*.jpg
+*.jpeg
+*.png
