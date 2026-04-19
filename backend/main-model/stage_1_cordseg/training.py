@@ -1,4 +1,5 @@
 import copy
+from tkinter import Image
 
 import segmentation_models_pytorch as smp
 import torch
@@ -12,6 +13,7 @@ import os
 from torch.utils.data import random_split
 from torchmetrics.classification import MulticlassJaccardIndex, MulticlassF1Score
 import torch.nn.functional as F
+from torchstain.normalizers import MacenkoNormalizer
 
 
 ## paths to the image files #########
@@ -33,10 +35,20 @@ for f in img_files:
     else:
         print("Missing mask for:", f)
 
+# Stain Normalisation
+
+REFERENCE_IMAGE = img_paths[0]          # ← swap for whichever image you prefer
+
+stain_normalizer = MacenkoNormalizer(backend="torch")
+ref_tensor = ToTensor()(Image.open(REFERENCE_IMAGE).convert("RGB"))  # float [0,1] CHW
+ref_u8     = (ref_tensor * 255).byte()                          # uint8 [0,255]
+stain_normalizer.fit(ref_u8)
+
 dataset = FickDataSet(
     img_paths=img_paths,
     mask_paths=mask_paths,
-    img_tf=ToTensor(),   
+    img_tf=ToTensor(),
+    stain_normalizer=stain_normalizer
 )
 
 # Move to gpu
@@ -50,9 +62,24 @@ learning_rate = 1e-4
 batch_size = 5
 epochs = 40
 
-# Evaluation metrics ##########
-# ignore_index=255 ignores values of 255 in the mask
+
+# Loss Function - ignore_index=255 ignores values of 255 in the mask
 loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+
+_ce_loss   = torch.nn.CrossEntropyLoss(ignore_index=255)
+_dice_loss = smp.losses.DiceLoss(
+    mode="multiclass",
+    classes=None,       # all classes
+    from_logits=True,   # our model outputs raw logits
+    ignore_index=255,
+)
+
+def combined_loss(logits, targets):
+    """Equal-weight sum of cross-entropy and soft Dice loss."""
+    return 0.5 * _ce_loss(logits, targets) + 0.5 * _dice_loss(logits, targets)
+
+# Evaluation metrics ##########
+
 iou_metric  = MulticlassJaccardIndex(num_classes=2, average="none", ignore_index=255).to(device)
 dice_metric = MulticlassF1Score(num_classes=2, average="none", ignore_index=255).to(device)
 
@@ -72,11 +99,10 @@ def train_loop(train_dataloader, model, optimizer):
         y = y.long()
 
         pred = model(X)
-        loss = loss_fn(pred, y)
-
+        
+        loss = combined_loss(pred, y)
         loss.backward()
         optimizer.step()
-
         running_loss += loss.item()
 
     return running_loss / len(train_dataloader)
@@ -100,8 +126,7 @@ def test_loop(test_dataloader, model):
             logits = model(X)   
             preds = torch.argmax(logits, dim=1)
 
-            loss = loss_fn(logits, y)
-            running_loss += loss.item()
+            running_loss += combined_loss(logits, y).item()
             # accumulate metrics
             iou_metric.update(preds, y)
             dice_metric.update(preds, y)
