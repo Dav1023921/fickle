@@ -3,10 +3,10 @@ from torch.utils.data import Dataset
 import numpy as np
 import torch
 from PIL import Image
-import torch.nn.functional as F
 from torchvision.transforms import Normalize, RandomCrop
 from torchvision.transforms import functional as F
-from torchstain.normalizers import MacenkoNormalizer
+import cv2
+import numpy as np
 
 color_map = {
     (0, 0, 0): 0, # Background
@@ -38,15 +38,53 @@ def rgb_to_mask(mask_rgb, color_map):
 
     return mask
 
+import random
+
+
+def augment(img, mask):
+    # Random horizontal flip
+    if random.random() > 0.5:
+        img  = F.hflip(img)
+        mask = F.hflip(mask)
+
+    # Random vertical flip
+    if random.random() > 0.5:
+        img  = F.vflip(img)
+        mask = F.vflip(mask)
+
+    # Random 90 degree rotation
+    if random.random() > 0.5:
+        angle = random.choice([90, 180, 270])
+        img  = F.rotate(img, angle)
+        mask = F.rotate(mask.unsqueeze(0), angle).squeeze(0)  # add/remove channel dim
+
+    # Colour jitter on image only
+    if random.random() > 0.5:
+        img = F.adjust_brightness(img, brightness_factor=random.uniform(0.8, 1.2))
+        img = F.adjust_contrast(img,   contrast_factor=random.uniform(0.8, 1.2))
+
+    return img, mask
+
+class AugmentedSubset(Dataset):
+    def __init__(self, subset):
+        self.subset = subset
+
+    def __len__(self):
+        return len(self.subset)
+
+    def __getitem__(self, idx):
+        img, mask = self.subset[idx]
+        img, mask = augment(img, mask)
+        return img, mask
 
 class FickDataSet(Dataset):
     def __init__(self, img_paths, mask_paths, img_tf=None, mask_tf=None,
-                 stain_normalizer: MacenkoNormalizer = None):
+                 reference=None):
         self.img_paths = img_paths
         self.mask_paths = mask_paths
         self.img_tf = img_tf
         self.mask_tf = mask_tf
-        self.stain_normalizer = stain_normalizer
+        self.reference  = reference
 
     def __len__(self):
         return len(self.img_paths)
@@ -70,25 +108,32 @@ class FickDataSet(Dataset):
         mask = rgb_to_mask(mask_rgb, color_map)
         mask = torch.from_numpy(mask).long()
 
+        # Stain normalisation
+        if self.reference is not None:
+            img_np = np.array(img)  # PIL to numpy
+            source_lab = cv2.cvtColor(img_np, cv2.COLOR_RGB2LAB).astype(float)
+            target_lab = cv2.cvtColor(self.reference, cv2.COLOR_RGB2LAB).astype(float)
+            for i in range(3):
+                source_lab[:,:,i] = (source_lab[:,:,i] - source_lab[:,:,i].mean()) \
+                                / (source_lab[:,:,i].std() + 1e-6) \
+                                * target_lab[:,:,i].std() \
+                                + target_lab[:,:,i].mean()
+            img_np = cv2.cvtColor(np.clip(source_lab, 0, 255).astype(np.uint8), 
+                                cv2.COLOR_LAB2RGB)
+            img = Image.fromarray(img_np)
+
+
+
         # Convert to Tensor
         if self.img_tf:
             img = self.img_tf(img)
-
-        # Stain normalisation
-        if self.stain_normalizer is not None:
-            img_u8 = (img * 255).byte()          # float [0,1] → uint8 [0,255]
-            try:
-                img_u8, _, _ = self.stain_normalizer.normalize(I=img_u8, stains=False)
-            except Exception:
-                # Normalisation can fail on near-uniform patches; keep original
-                pass
-            img = img_u8.float() / 255.0 
 
         # Return a random crop of the image and the corresponding crop of the mask
         i, j, h, w = RandomCrop.get_params(img, output_size=(dim, dim))
         img = F.crop(img, i, j, h, w)
         mask = F.crop(mask, i, j, h, w)
 
+        # Normalization
         img = imagenet_normalize(img)
 
         return img, mask

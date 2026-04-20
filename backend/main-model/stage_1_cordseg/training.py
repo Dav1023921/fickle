@@ -1,11 +1,8 @@
 import copy
-from tkinter import Image
 
 import segmentation_models_pytorch as smp
 import torch
-from torch import nn
 from torch.utils.data import DataLoader
-from torchvision import datasets
 from torchvision.transforms import ToTensor
 from myunet import make_model
 from dataset import FickDataSet
@@ -13,7 +10,10 @@ import os
 from torch.utils.data import random_split
 from torchmetrics.classification import MulticlassJaccardIndex, MulticlassF1Score
 import torch.nn.functional as F
-from torchstain.normalizers import MacenkoNormalizer
+from PIL import Image
+import cv2
+import numpy as np
+from dataset import FickDataSet, AugmentedSubset
 
 
 ## paths to the image files #########
@@ -37,18 +37,14 @@ for f in img_files:
 
 # Stain Normalisation
 
-REFERENCE_IMAGE = img_paths[0]          # ← swap for whichever image you prefer
-
-stain_normalizer = MacenkoNormalizer(backend="torch")
-ref_tensor = ToTensor()(Image.open(REFERENCE_IMAGE).convert("RGB"))  # float [0,1] CHW
-ref_u8     = (ref_tensor * 255).byte()                          # uint8 [0,255]
-stain_normalizer.fit(ref_u8)
+REFERENCE_IMAGE = img_paths[0]  # ← swap for your chosen reference
+reference = np.array(Image.open(REFERENCE_IMAGE).convert("RGB"))
 
 dataset = FickDataSet(
     img_paths=img_paths,
     mask_paths=mask_paths,
     img_tf=ToTensor(),
-    stain_normalizer=stain_normalizer
+    reference=reference
 )
 
 # Move to gpu
@@ -64,7 +60,6 @@ epochs = 40
 
 
 # Loss Function - ignore_index=255 ignores values of 255 in the mask
-loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
 
 _ce_loss   = torch.nn.CrossEntropyLoss(ignore_index=255)
 _dice_loss = smp.losses.DiceLoss(
@@ -143,7 +138,7 @@ def test_loop(test_dataloader, model):
     return mean_loss, mdice
 
 # -----------------------------
-## Split into train / validation / test #######
+# Split into train / validation / test #######
 
 n = len(dataset)
 n_train = int(0.7 * n)
@@ -151,6 +146,7 @@ n_val = int(0.15 * n)
 n_test = n - n_train - n_val
 
 train_set, val_set, test_set = random_split(dataset, [n_train, n_val, n_test])
+train_set = AugmentedSubset(train_set)
 
 # Creating Dataloader
 train_dataloader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
@@ -175,8 +171,9 @@ for t in range(epochs):
     print("\nValidation results")
     val_loss, val_dice = test_loop(val_dataloader, model)
 
-    if val_dice > best_val_dice:
-        best_val_dice = val_dice
+    vessel_dice = val_dice[1].item()   # Vessel class only
+    if vessel_dice > best_val_dice:
+        best_val_dice    = vessel_dice
         best_model_state = copy.deepcopy(model.state_dict())
 
 # Load best model before final test
