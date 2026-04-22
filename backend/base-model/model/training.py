@@ -1,4 +1,3 @@
-from matplotlib.pylab import copy
 import segmentation_models_pytorch as smp
 import torch
 from torch import nn
@@ -16,7 +15,7 @@ from torchmetrics.classification import (
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
-
+PATIENCE = 10
 #–--- Instantiate the Dataset ------------------------------------------------
 
 # Make lists of corresponding image and mask paths
@@ -53,12 +52,8 @@ batch_size = 5
 epochs = 70
 
 # -- Loss Function ----------------------------------------------------------------
-class_weights = torch.tensor([0.3, 3.0, 3.0, 1.5, 1.5]).to(device)
-loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
-_dice_loss = smp.losses.DiceLoss(mode="multiclass", from_logits=True, ignore_index=255)
 
-def combined_loss(logits, targets):
-    return 0.5 * loss_fn(logits, targets) + 0.5 * _dice_loss(logits, targets)
+loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
 
 # -- Evaluation Metrics  ----------------------------------------------------------------
 iou_metric       = MulticlassJaccardIndex(num_classes=5, average="none", ignore_index=255).to(device)
@@ -85,7 +80,7 @@ def train_loop(train_dataloader, model, optimizer):
         y = y.long()
 
         pred = model(X)
-        loss = combined_loss(pred, y)
+        loss = loss_fn(pred, y)
 
         loss.backward()
         optimizer.step()
@@ -113,7 +108,7 @@ def test_loop(test_dataloader, model):
             logits = model(X)   
             preds = torch.argmax(logits, dim=1)
 
-            loss = combined_loss(logits, y)
+            loss = loss_fn(logits, y)
             running_loss += loss.item()
 
             ## Update metrics
@@ -174,6 +169,7 @@ best_val_dice = 0.0
 best_model_state = None
 
 # Training ---------------------------------------------------------------
+epochs_without_improvement = 0
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
 
@@ -186,12 +182,16 @@ for t in range(epochs):
 
     if val_dice > best_val_dice:
         best_val_dice = val_dice
-        best_model_state = copy.deepcopy(model.state_dict()) 
-
-    # inside epoch loop after validation:
+        best_model_state = model.state_dict().copy()
+        epochs_without_improvement = 0
+    else:
+        epochs_without_improvement += 1
+        if epochs_without_improvement >= PATIENCE:
+            print(f"\nEarly stopping triggered after {t+1} epochs.")
+            break
+    
     train_losses.append(train_loss)
     val_losses.append(val_loss)
-
 
 # --- Final evaluation on test set -----------------------------
 model.load_state_dict(best_model_state)
