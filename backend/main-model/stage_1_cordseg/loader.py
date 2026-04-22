@@ -1,12 +1,10 @@
 from utilities import make_all_instance_crops
 import os
-import cv2
 import numpy as np
 from PIL import Image
 
 # This file generates the crops of cords that will be used as training data for 
 # the vessel segmentation model. 
-
 
 color_map = {
     (0, 0, 0): 0, # Background
@@ -30,8 +28,8 @@ def rgb_to_mask(mask_rgb):
 
 
 def generate_cords_for_training():
-    img_dir  = "cord-dataset/images"
-    mask_dir = "cord-dataset/masks"
+    img_dir  = "new_images"
+    mask_dir = "new_masks"
 
     img_files = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(".jpg")])
 

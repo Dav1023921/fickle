@@ -69,7 +69,8 @@ def semantic_to_instances(binary_mask, min_area=900):
         pts = cnt.squeeze()
         if len(pts.shape) == 1:
             pts = pts.reshape(-1, 2)
-        distances = torch.cdist(pts, pts)
+        pts_tensor = torch.from_numpy(pts).float()
+        distances = torch.cdist(pts_tensor, pts_tensor)
         i, j = np.unravel_index(distances.argmax(), distances.shape)
         p1 = pts[i].tolist()
         p2 = pts[j].tolist()
