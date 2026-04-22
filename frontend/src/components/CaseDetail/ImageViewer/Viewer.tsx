@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import useImage from "use-image";
 import Konva from "konva";
 import { Stage, Layer, Image as KonvaImage, Line, Circle } from "react-konva";
-import { Box, Button, Typography, List, ListItem, ListItemText, Divider } from "@mui/material";
+import { Box, Button } from "@mui/material";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -10,7 +10,6 @@ type Vessel = {
   polygon: number[];
   area: number;
   type: "Artery" | "Vein";
-  heatmap?: string;
 };
 
 type Cord = {
@@ -18,7 +17,6 @@ type Cord = {
   vessels: Vessel[];
   diameter: number;
   confidence: number;
-  heatmap?: string;
 };
 
 type FlatEntry = {
@@ -28,8 +26,6 @@ type FlatEntry = {
   points: number[];
   stroke: string;
   fill: string;
-  label: string;
-  detail: string;
 };
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -52,7 +48,6 @@ function flatten(cords: Cord[]): FlatEntry[] {
     result.push({
       id: `c${ci}`, cordIndex: ci, vesselIndex: null,
       points: cord.polygon, stroke: "#3b82f6", fill: "rgba(59,130,246,0.08)",
-      label: `Cord ${ci + 1}`, detail: `Diameter: ${Math.round(cord.diameter)}px`,
     });
     for (let vi = 0; vi < cord.vessels.length; vi++) {
       const vessel = cord.vessels[vi];
@@ -62,8 +57,6 @@ function flatten(cords: Cord[]): FlatEntry[] {
         points: vessel.polygon,
         stroke: isArtery ? "#ef4444" : "#3b82f6",
         fill: isArtery ? "rgba(239,68,68,0.12)" : "rgba(59,130,246,0.12)",
-        label: `Cord ${ci + 1} — ${vessel.type} ${vi + 1}`,
-        detail: `Area: ${Math.round(vessel.area)}px²`,
       });
     }
   }
@@ -104,36 +97,6 @@ function EditablePolygon({ entry, strokeWidth, editing, selected, onChange, onSe
   );
 }
 
-// ─── heatmap grid ─────────────────────────────────────────────────────────────
-
-function HeatmapGrid({ cords }: { cords: Cord[] }) {
-  const items: { label: string; src?: string }[] = [];
-
-  cords.forEach((cord, ci) => {
-    cord.vessels.forEach((vessel, vi) => {
-      items.push({ label: `Cord ${ci + 1} — ${vessel.type} ${vi + 1}`, src: vessel.heatmap });
-    });
-  });
-
-  return (
-    <Box sx={{ p: 2, overflowY: 'auto', height: '100%', display: 'flex', flexWrap: 'wrap', gap: 2, alignContent: 'flex-start' }}>
-      {items.map((item, i) => (
-        <Box key={i} sx={{ width: 140, textAlign: 'center' }}>
-          {item.src
-            ? <img src={item.src} alt={item.label} style={{ width: '100%', display: 'block' }} />
-            : <Box sx={{ height: 120, bgcolor: 'grey.100', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography variant="caption" color="text.disabled">No heatmap</Typography>
-              </Box>
-          }
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-            {item.label}
-          </Typography>
-        </Box>
-      ))}
-    </Box>
-  );
-}
-
 // ─── main viewer ──────────────────────────────────────────────────────────────
 
 const ZOOM_BY = 1.05;
@@ -153,7 +116,6 @@ function Viewer({ imageUrl, polygons = [] }: Props) {
   const [zoom, setZoom]                 = useState(1);
   const [dims, setDims]                 = useState({ width: 800, height: 600 });
   const [showPolygons, setShowPolygons] = useState(true);
-  const [showHeatmaps, setShowHeatmaps] = useState(false);
   const [editing, setEditing]           = useState(false);
   const [cords, setCords]               = useState<Cord[]>(polygons);
   const [selectedId, setSelectedId]     = useState<string | null>(null);
@@ -185,7 +147,7 @@ function Viewer({ imageUrl, polygons = [] }: Props) {
 
   useEffect(() => {
     if (!image) return;
-    const fit = Math.min(dims.width / image.width, dims.height / image.height);
+    const fit = Math.min(dims.width / image.width, dims.height / image.height) * 0.92;
     setFitScale(fit);
     setZoom(1);
     centerImage(image, fit, 1);
@@ -221,6 +183,17 @@ function Viewer({ imageUrl, polygons = [] }: Props) {
     setSelectedId(id === selectedId ? null : id);
   }
 
+  function dragBounds(pos: { x: number; y: number }) {
+  const scale = fitScale * zoom;
+  const imgW = image!.width * scale;
+  const imgH = image!.height * scale;
+  const padding = 100;
+  return {
+    x: Math.min(padding, Math.max(dims.width - imgW - padding, pos.x)),
+    y: Math.min(padding, Math.max(dims.height - imgH - padding, pos.y)),
+  };
+}
+
   const flat = flatten(cords);
   const strokeWidth = 2 / (fitScale * zoom);
   const btn = { color: "white", borderColor: "#444" };
@@ -238,9 +211,6 @@ function Viewer({ imageUrl, polygons = [] }: Props) {
         <Button size="small" variant="outlined" sx={btn} onClick={() => setShowPolygons(p => !p)}>
           {showPolygons ? "Hide Polygons" : "Show Polygons"}
         </Button>
-        <Button size="small" variant="outlined" sx={btn} onClick={() => setShowHeatmaps(p => !p)}>
-          {showHeatmaps ? "Hide Heatmaps" : "Heatmaps"}
-        </Button>
         <Box sx={{ flex: 1 }} />
         {editing
           ? <Button size="small" variant="outlined" sx={btn} onClick={() => { setEditing(false); setCords(polygons); }}>Cancel</Button>
@@ -248,51 +218,25 @@ function Viewer({ imageUrl, polygons = [] }: Props) {
         }
       </Box>
 
-      {/* canvas or heatmap grid */}
+      {/* canvas */}
       <Box ref={containerRef} sx={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
-        {showHeatmaps
-          ? <HeatmapGrid cords={cords} />
-          : (
-            <Stage ref={stageRef} width={dims.width} height={dims.height} draggable={!editing} onWheel={handleWheel}>
-              <Layer>
-                <KonvaImage image={image} x={0} y={0} width={image.width} height={image.height} />
-              </Layer>
-              {showPolygons && (
-                <Layer>
-                  {flat.map((e) => (
-                    <EditablePolygon key={e.id} entry={e} strokeWidth={strokeWidth}
-                      editing={editing} selected={selectedId === e.id}
-                      onChange={(pts) => updatePolygon(e, pts)}
-                      onSelect={() => toggleSelect(e.id)}
-                    />
-                  ))}
-                </Layer>
-              )}
-            </Stage>
-          )
-        }
+        <Stage ref={stageRef} width={dims.width} height={dims.height} draggable={!editing} onWheel={handleWheel} dragBoundFunc={dragBounds}>
+          <Layer>
+            <KonvaImage image={image} x={0} y={0} width={image.width} height={image.height} />
+          </Layer>
+          {showPolygons && (
+            <Layer>
+              {flat.map((e) => (
+                <EditablePolygon key={e.id} entry={e} strokeWidth={strokeWidth}
+                  editing={editing} selected={selectedId === e.id}
+                  onChange={(pts) => updatePolygon(e, pts)}
+                  onSelect={() => toggleSelect(e.id)}
+                />
+              ))}
+            </Layer>
+          )}
+        </Stage>
       </Box>
-
-      {/* polygon list */}
-      {!showHeatmaps && (
-        <Box sx={{ height: 220, borderTop: "1px solid", borderColor: "divider", overflowY: "auto", flexShrink: 0 }}>
-          <List dense disablePadding>
-            {flat.map((e) => (
-              <>
-                <ListItem key={e.id} onClick={() => toggleSelect(e.id)}
-                  sx={{ cursor: "pointer", bgcolor: selectedId === e.id ? "primary.50" : "white" }}>
-                  <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: e.stroke, mr: 1.5, flexShrink: 0 }} />
-                  <ListItemText primary={e.label} secondary={e.detail}
-                    slotProps={{ primary: { style: { fontSize: 13 } }, secondary: { style: { fontSize: 11 } } }}
-                  />
-                </ListItem>
-                <Divider />
-              </>
-            ))}
-          </List>
-        </Box>
-      )}
-
     </Box>
   );
 }

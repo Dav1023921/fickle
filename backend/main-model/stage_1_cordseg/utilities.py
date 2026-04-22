@@ -2,16 +2,9 @@ import torchvision.transforms as T
 import torch
 from myunet import make_model
 import numpy as np
-from dataset import color_map
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import cv2
-from PIL import Image
 import os
 
-output_dir = "instance_crops"
-os.makedirs(output_dir, exist_ok=True)
 
 IGNORE_RGB = (10, 10, 10)
 
@@ -19,7 +12,7 @@ IGNORE_RGB = (10, 10, 10)
 # Returns the original image, the raw model output (logits), and the predicted mask
 def run_model(img):
 
-    # open the image
+    # convert image to np array
     image_np = np.array(img)
 
     # make the model and load the state
@@ -28,36 +21,21 @@ def run_model(img):
     model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
     model.eval()
 
-    transform = T.Compose([
-        T.ToTensor(),
-    ])
-
-    x = transform(img).unsqueeze(0)
+    # convert to tensor
+    x = T.ToTensor()(img).unsqueeze(0)
 
     with torch.no_grad():
         logits = model(x)
         preds = torch.argmax(logits, dim=1)
-        probs = torch.softmax(logits, dim=1)
 
     pred_mask = preds[0].cpu().numpy().astype(np.uint8)
 
-    # e.g. class 1 (foreground)
-    confidence_map = probs[0, 1].cpu().numpy()  # shape: (H, W)
-
-    return image_np, logits, pred_mask, confidence_map
-
-# returns the mean probability within that instance region.
-def get_instance_confidence(confidence_map, instance_mask):
-    cord_pixels = confidence_map[instance_mask == 1]
-    if len(cord_pixels) == 0:
-        return 0.0
-    return float(cord_pixels.mean())
+    return image_np, logits, pred_mask
 
 # Returns a dictionary of instances with their bounding boxes coordinates and masks
 def semantic_to_instances(binary_mask, min_area=900):
  
-
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
         binary_mask.astype(np.uint8),
         connectivity=8
     )
@@ -74,13 +52,28 @@ def semantic_to_instances(binary_mask, min_area=900):
 
         if area < min_area:
             continue
-
+        
+        # Get the mask for this particular instance
         instance_mask = (labels == label_id).astype(np.uint8)
 
-        # Compute morphology features from instance mask
+        # First find the contours of the instance mask
         contours, _ = cv2.findContours(instance_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         cnt = contours[0]
+
+        # Calculate Morphology features
         perimeter = cv2.arcLength(cnt, True)
+        area = cv2.contourArea(cnt)
+        circularity = float((4 * np.pi * area) / (perimeter ** 2)) if perimeter > 0 else 0.0
+
+        # CalculateFeret diameter endpoints
+        pts = cnt.squeeze()
+        if len(pts.shape) == 1:
+            pts = pts.reshape(-1, 2)
+        distances = torch.cdist(pts, pts)
+        i, j = np.unravel_index(distances.argmax(), distances.shape)
+        p1 = pts[i].tolist()
+        p2 = pts[j].tolist()
+        feret_diameter = float(distances[i, j])
 
 
         # Simplify contour for Konva rendering
@@ -95,7 +88,17 @@ def semantic_to_instances(binary_mask, min_area=900):
             "polygon": polygon,
             "width": int(w),
             "height": int(h),
+            # --- Morphology ---
+            "area": float(area),
+            "perimeter": float(perimeter),
+            "circularity": round(circularity, 4),
+            # --- Feret Diameter
+            "feret_diameter_px": round(feret_diameter, 2),
+            "feret_p1": p1,   # [x1, y1] — Konva line endpoint 1
+            "feret_p2": p2,   # [x2, y2] — Konva line endpoint 2
         })
+
+        
 
     return instances
 
@@ -114,29 +117,6 @@ def choose_crop_size(bbox, small_size=512, large_size=768):
     if max(w, h) <= small_size:
         return small_size
     return large_size
-
-from io import BytesIO
-import base64
-
-def get_instance_heatmap(confidence_map, instance_mask, bbox):
-    x1, y1, x2, y2 = bbox
-    
-    # crop confidence map to bbox
-    conf_crop = confidence_map[y1:y2, x1:x2]
-    mask_crop = instance_mask[y1:y2, x1:x2]
-    
-    # mask out non-cord pixels
-    heatmap = conf_crop.copy()
-    heatmap[mask_crop == 0] = 0
-    
-    # convert to colour
-    heatmap_coloured = cm.jet(heatmap)[:, :, :3]
-    heatmap_uint8 = (heatmap_coloured * 255).astype(np.uint8)
-    
-    img = Image.fromarray(heatmap_uint8)
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    return f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode('utf-8')}"
 
 # Given an instance_mask and bbox values and image get the crop
 def make_instance_crop(image, instance_mask, bbox, ignore_rgb=IGNORE_RGB):
@@ -176,15 +156,13 @@ def make_instance_crop(image, instance_mask, bbox, ignore_rgb=IGNORE_RGB):
     return crop, crop_size, crop_x1, crop_y1
 
 # Return an array of dictionaries with the crops for each dict
-def make_all_instance_crops(image, pred_mask, confidence_map, foreground_class=1, min_area=2000):
+def make_all_instance_crops(image, pred_mask, foreground_class=1, min_area=2000):
 
     # create a binary mask and run connected components to get instance masks and bboxes
     binary_mask = (pred_mask == foreground_class).astype(np.uint8)
     instances = semantic_to_instances(binary_mask, min_area=min_area)
 
     # for each instance, make a fixed-size crop centered on the instance
-
-
     for inst in instances:
         crop, size, crop_x1, crop_y1 = make_instance_crop(
             image=image,
@@ -196,12 +174,6 @@ def make_all_instance_crops(image, pred_mask, confidence_map, foreground_class=1
         inst["crop"] = crop
         inst["size"] = size
         inst["crop_origin"] = (crop_x1, crop_y1) 
-        inst["confidence"] = get_instance_confidence(confidence_map, inst["mask"])
-        inst["heatmap"] = get_instance_heatmap(
-            confidence_map,
-            inst["mask"],
-            inst["bbox"],
-        )
 
     return instances
 
@@ -258,14 +230,22 @@ def generate_cord_polygons(
 
     return polygons
 
-def save_binary_mask(pred_mask, img_name, foreground_class=1):
-    binary_mask = (pred_mask == foreground_class).astype(np.uint8) * 255
-    mask_img = Image.fromarray(binary_mask)
-    save_path = os.path.join(output_dir, f"binary_mask_{img_name}.png")
-    mask_img.save(save_path)
+
+
+# output_dir = "instance_crops"
+
+# def save_binary_mask(pred_mask, img_name, foreground_class=1):
+#     binary_mask = (pred_mask == foreground_class).astype(np.uint8) * 255
+#     mask_img = Image.fromarray(binary_mask)
+#     save_path = os.path.join(output_dir, f"binary_mask_{img_name}.png")
+#     mask_img.save(save_path)
 
 
 # ## Testing
+
+# output_dir = "instance_crops"
+# os.makedirs(output_dir, exist_ok=True)
+
 # image, logits, pred_mask = run_model("case_150_instance_1_.jpg")
 
 # save_binary_mask(pred_mask, "case247", foreground_class=1)

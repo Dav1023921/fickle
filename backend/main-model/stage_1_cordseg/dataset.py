@@ -1,4 +1,3 @@
-import os
 from torch.utils.data import Dataset
 import numpy as np
 import torch
@@ -7,18 +6,21 @@ from torchvision.transforms import Normalize, RandomCrop
 from torchvision.transforms import functional as F
 import cv2
 import numpy as np
+import random
 
+
+# The masks are in the form of RGB images when exported by CVAT.
+# I encode their RGB values into class labels using this color map.
 color_map = {
     (0, 0, 0): 0, # Background
     (13, 4, 72): 1, # Vessel
     (10, 10, 10): 255, # Ignore
 }
 
-# ImageNet stats for the ResNet34 encoder
-IMAGENET_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_STD  = [0.229, 0.224, 0.225]
+# This uses ImageNet normalization, which is needed for the pretrained ResNet34 encoder,
+# I found that it converged faster with this normalization.
+imagenet_normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-imagenet_normalize = Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
 
 def pad_to_512(img, width, height, fill):
     pad_w = max(0, 512 - width)
@@ -27,6 +29,7 @@ def pad_to_512(img, width, height, fill):
     img = F.pad(img, (0, 0, pad_w, pad_h), fill=fill)
     return img
 
+# convert rgb image to mask
 def rgb_to_mask(mask_rgb, color_map):
     h, w, _ = mask_rgb.shape
 
@@ -38,19 +41,18 @@ def rgb_to_mask(mask_rgb, color_map):
 
     return mask
 
-import random
-
-
+# data augmentation
 def augment(img, mask):
-    # Random horizontal flip
+    # Random vertical or horizontal flip
     if random.random() > 0.5:
-        img  = F.hflip(img)
-        mask = F.hflip(mask)
+        flip_no = random.choice([0, 1])  # 0: vertical, 1: horizontal
 
-    # Random vertical flip
-    if random.random() > 0.5:
-        img  = F.vflip(img)
-        mask = F.vflip(mask)
+        if flip_no == 0:
+            img  = F.vflip(img)
+            mask = F.vflip(mask)
+        else:
+            img  = F.hflip(img)
+            mask = F.hflip(mask)
 
     # Random 90 degree rotation
     if random.random() > 0.5:
@@ -65,6 +67,7 @@ def augment(img, mask):
 
     return img, mask
 
+# A wrapper dataset that applies data augmentation specifically for the training data
 class AugmentedSubset(Dataset):
     def __init__(self, subset):
         self.subset = subset
@@ -90,7 +93,7 @@ class FickDataSet(Dataset):
         return len(self.img_paths)
 
     def __getitem__(self, idx):
-        # patching dimensions
+        # we use 512 x 512 patches in this training
         dim = 512
 
         # Converting images into RGB
@@ -101,7 +104,6 @@ class FickDataSet(Dataset):
         width, height = img.size
         img = pad_to_512(img, width, height, 0)
         mask_rgb = pad_to_512(mask_rgb,width, height, (10,10,10))
-
 
         # Converting an RGB mask to segmentation Mask
         mask_rgb = np.array(mask_rgb, dtype=np.uint8)
@@ -123,7 +125,6 @@ class FickDataSet(Dataset):
             img = Image.fromarray(img_np)
 
 
-
         # Convert to Tensor
         if self.img_tf:
             img = self.img_tf(img)
@@ -137,4 +138,8 @@ class FickDataSet(Dataset):
         img = imagenet_normalize(img)
 
         return img, mask
+
+
+
+
 

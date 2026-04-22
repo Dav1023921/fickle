@@ -1,3 +1,4 @@
+from matplotlib.pylab import copy
 import segmentation_models_pytorch as smp
 import torch
 from torch import nn
@@ -52,8 +53,12 @@ batch_size = 5
 epochs = 70
 
 # -- Loss Function ----------------------------------------------------------------
-class_weights = torch.tensor([0.5, 2.5, 2.5, 1.0, 1.0]).to(device)
+class_weights = torch.tensor([0.3, 3.0, 3.0, 1.5, 1.5]).to(device)
 loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
+_dice_loss = smp.losses.DiceLoss(mode="multiclass", from_logits=True, ignore_index=255)
+
+def combined_loss(logits, targets):
+    return 0.5 * loss_fn(logits, targets) + 0.5 * _dice_loss(logits, targets)
 
 # -- Evaluation Metrics  ----------------------------------------------------------------
 iou_metric       = MulticlassJaccardIndex(num_classes=5, average="none", ignore_index=255).to(device)
@@ -62,8 +67,6 @@ dice_metric      = MulticlassF1Score(num_classes=5, average="none", ignore_index
 # --- History for plotting ---
 train_losses = []
 val_losses   = []
-val_dices    = []
-val_ious     = []
 
 # -- Training ----------------------------------------------------------------------------
 
@@ -82,7 +85,7 @@ def train_loop(train_dataloader, model, optimizer):
         y = y.long()
 
         pred = model(X)
-        loss = loss_fn(pred, y)
+        loss = combined_loss(pred, y)
 
         loss.backward()
         optimizer.step()
@@ -110,7 +113,7 @@ def test_loop(test_dataloader, model):
             logits = model(X)   
             preds = torch.argmax(logits, dim=1)
 
-            loss = loss_fn(logits, y)
+            loss = combined_loss(logits, y)
             running_loss += loss.item()
 
             ## Update metrics
@@ -143,16 +146,6 @@ def plot_training_curves():
     axes[0].set_title("Loss")
     axes[0].set_xlabel("Epoch")
     axes[0].legend()
-
-    axes[1].plot(epochs_range, val_dices, label="Val Dice", color="green")
-    axes[1].set_title("Validation Dice Score")
-    axes[1].set_xlabel("Epoch")
-    axes[1].legend()
-
-    axes[2].plot(epochs_range, val_ious, label="Val IoU", color="orange")
-    axes[2].set_title("Validation IoU")
-    axes[2].set_xlabel("Epoch")
-    axes[2].legend()
 
     plt.tight_layout()
     plt.savefig("training_curves.png", dpi=150)
@@ -189,11 +182,16 @@ for t in range(epochs):
     print("Mean Loss:", train_loss)
 
     print("\nValidation results")
-    val_loss, val_dice = test_loop(val_dataloader, model)
+    val_loss, val_dice, val_iou = test_loop(val_dataloader, model)
 
     if val_dice > best_val_dice:
         best_val_dice = val_dice
-        best_model_state = model.state_dict().copy()
+        best_model_state = copy.deepcopy(model.state_dict()) 
+
+    # inside epoch loop after validation:
+    train_losses.append(train_loss)
+    val_losses.append(val_loss)
+
 
 # --- Final evaluation on test set -----------------------------
 model.load_state_dict(best_model_state)

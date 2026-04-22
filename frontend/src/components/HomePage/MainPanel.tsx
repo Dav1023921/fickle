@@ -35,7 +35,7 @@ const MainPanel = () => {
             const formData = new FormData()
             formData.append("file", c.file)
             try {
-                const res = await fetch("http://localhost:8000/analyse", { method: "POST", body: formData })
+                const res = await fetch("http://localhost:8003/analyse", { method: "POST", body: formData })
                 const result = await res.json()
                 setCases(prev => prev.map(x => x.id === c.id ? { ...x, status: "complete" as CaseStatus, result } : x))
             } catch (err) {

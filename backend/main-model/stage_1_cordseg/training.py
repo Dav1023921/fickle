@@ -1,5 +1,4 @@
 import copy
-
 import segmentation_models_pytorch as smp
 import torch
 from torch.utils.data import DataLoader
@@ -9,9 +8,7 @@ from dataset import FickDataSet
 import os
 from torch.utils.data import random_split
 from torchmetrics.classification import MulticlassJaccardIndex, MulticlassF1Score
-import torch.nn.functional as F
 from PIL import Image
-import cv2
 import numpy as np
 from dataset import FickDataSet, AugmentedSubset
 
@@ -27,19 +24,19 @@ img_files = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(".jpg")
 
 img_paths, mask_paths = [], []
 for f in img_files:
-    stem = os.path.splitext(f)[0]
-    mp = os.path.join(mask_dir, stem + ".png")
-    if os.path.exists(mp):
+    case_no = os.path.splitext(f)[0]
+    mask_path = os.path.join(mask_dir, case_no + ".png")
+    if os.path.exists(mask_path):
         img_paths.append(os.path.join(img_dir, f))
-        mask_paths.append(mp)
+        mask_paths.append(mask_path)
     else:
         print("Missing mask for:", f)
 
 # Stain Normalisation
-
-REFERENCE_IMAGE = img_paths[0]  # ← swap for your chosen reference
+REFERENCE_IMAGE = img_paths[0] 
 reference = np.array(Image.open(REFERENCE_IMAGE).convert("RGB"))
 
+# Create the dataset
 dataset = FickDataSet(
     img_paths=img_paths,
     mask_paths=mask_paths,
@@ -53,14 +50,13 @@ print(f"Using {device} device")
 
 class_names = ["Background", "Vessel"]
 
-# Hyperparameters ##########
+# Hyperparameters 
 learning_rate = 1e-4
 batch_size = 5
 epochs = 40
 
-
-# Loss Function - ignore_index=255 ignores values of 255 in the mask
-
+# Loss Function - uses a combination of cross-entropy and soft Dice loss
+# ignore_index=255 ignores values of 255 in the mask
 _ce_loss   = torch.nn.CrossEntropyLoss(ignore_index=255)
 _dice_loss = smp.losses.DiceLoss(
     mode="multiclass",
@@ -68,13 +64,11 @@ _dice_loss = smp.losses.DiceLoss(
     from_logits=True,   # our model outputs raw logits
     ignore_index=255,
 )
-
 def combined_loss(logits, targets):
     """Equal-weight sum of cross-entropy and soft Dice loss."""
     return 0.5 * _ce_loss(logits, targets) + 0.5 * _dice_loss(logits, targets)
 
-# Evaluation metrics ##########
-
+# Evaluation metrics 
 iou_metric  = MulticlassJaccardIndex(num_classes=2, average="none", ignore_index=255).to(device)
 dice_metric = MulticlassF1Score(num_classes=2, average="none", ignore_index=255).to(device)
 
@@ -137,15 +131,14 @@ def test_loop(test_dataloader, model):
 
     return mean_loss, mdice
 
-# -----------------------------
-# Split into train / validation / test #######
+# ----------------------------------------------------------
 
+# Split into train / validation / test 
 n = len(dataset)
-n_train = int(0.7 * n)
-n_val = int(0.15 * n)
-n_test = n - n_train - n_val
+n_train, n_val, n_test = int(0.7 * n), int(0.15 * n), int(0.15 * n)
 
 train_set, val_set, test_set = random_split(dataset, [n_train, n_val, n_test])
+
 train_set = AugmentedSubset(train_set)
 
 # Creating Dataloader
@@ -157,6 +150,7 @@ test_dataloader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 model = make_model().to(device)
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
 
+# Track best val_dice and model state
 best_val_dice = 0.0
 best_model_state = None
 
@@ -170,7 +164,7 @@ for t in range(epochs):
 
     print("\nValidation results")
     val_loss, val_dice = test_loop(val_dataloader, model)
-
+    print("Validation Loss:", val_loss)
     vessel_dice = val_dice[1].item()   # Vessel class only
     if vessel_dice > best_val_dice:
         best_val_dice    = vessel_dice

@@ -4,6 +4,10 @@ import cv2
 import numpy as np
 from PIL import Image
 
+# This file generates the crops of cords that will be used as training data for 
+# the vessel segmentation model. 
+
+
 color_map = {
     (0, 0, 0): 0, # Background
     (13, 4, 72): 1, # Cord

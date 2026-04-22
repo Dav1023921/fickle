@@ -12,7 +12,7 @@ const DiagnosisLabel = () => {
             sx={{
             justifyContent: "flex-start",}}>
                 <LightbulbIcon fontSize="small" sx={{ color: "#FFFFFF" }} />
-                <Typography variant="h4" sx={{ color: "#FFFFFF" }}>AI Diagnosis Suggestion</Typography>
+                <Typography variant="h4" sx={{ color: "#FFFFFF" }}>Findings</Typography>
             </Stack>
         </Box>   
     )

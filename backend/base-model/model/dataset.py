@@ -3,13 +3,12 @@ from torch.utils.data import Dataset
 import numpy as np
 import torch
 from PIL import Image
-import torch.nn.functional as F
-from torchvision.transforms import RandomCrop
+from torchvision.transforms import Normalize, RandomCrop
 from torchvision.transforms import functional as F
 
 
-# We implement the dataset here, where I will try and do a patch based segmentation system
-# as the initial dataset is quite large.
+# We implement the dataset here, where I use a patch based segmentation training
+
 
 def pad_to_512(img, width, height, fill):
     pad_w = max(0, 512 - width)
@@ -22,7 +21,7 @@ color_map = {
     (0, 0, 0): 0, # Background
     (56,37,158): 1, # Artery 
     (166,24,93): 2, # Vein
-    (13, 4, 72): 3, # Vessel
+    (13, 4, 72): 3, # Cord
     (204, 153, 51): 4, # Roll 
     (61, 245, 61): 255, # Ignore
 
@@ -39,6 +38,7 @@ def rgb_to_mask(mask_rgb, color_map):
 
     return mask
 
+imagenet_normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
 class FickDataSet(Dataset):
     def __init__(self, img_paths, mask_paths, img_tf=None, mask_tf=None):
@@ -75,6 +75,8 @@ class FickDataSet(Dataset):
         i, j, h, w = RandomCrop.get_params(img, output_size=(dim, dim))
         img = F.crop(img, i, j, h, w)
         mask = F.crop(mask, i, j, h, w)
+
+        img = imagenet_normalize(img)
 
         return img, mask
 

@@ -15,7 +15,7 @@ cls_to_rgb = {
     0: (0, 0, 0),
     1: (56, 37, 158),
     2: (166, 24, 93),
-    3: (13, 4, 72),
+    3: (13, 4, 72), # Cord
     4: (204, 153, 51),
 
 }
@@ -154,7 +154,7 @@ def generate_entropy_overlay(logits, normalize: bool = True, alpha: float = 0.45
 
     return buffer
 
-def predict_model(img):
+def run_model(img):
     model = make_model()
     model.load_state_dict(torch.load("unet_resnet34.pth"))
     model.eval()
@@ -171,8 +171,43 @@ def predict_model(img):
     
     return logits, preds
 
-def predict_SUA():
-    return None
+def post_process(preds):
+    results = []
+    # Convert to binary mask for the cord class(3)
+    cord_mask = (preds == 3).astype(np.uint8)
+    num_cords, cord_labels = cv2.connectedComponents(cord_mask)
+
+    # For each cord instance, extract its mask
+    for cord_id in range(1, num_cords):
+        single_cord = (cord_labels == cord_id)
+        
+        # For the cord mask find the artery mask and vein mask within
+        artery_mask = ((preds == 1) & single_cord).astype(np.uint8)
+        vein_mask   = ((preds == 2) & single_cord).astype(np.uint8)
+
+        # Run connected components again to get instances
+        num_arteries, artery_labels = cv2.connectedComponents(artery_mask)
+        num_veins, vein_labels    = cv2.connectedComponents(vein_mask)
+
+        results.append({
+            "cord_id": cord_id,
+            "cord_mask": single_cord,
+            "num_arteries": num_arteries - 1, # subtract 1 for background
+            "num_veins": num_veins - 1,
+            "artery_labels": artery_labels[artery_labels > 0],
+            "vein_labels": vein_labels[vein_labels > 0]
+        })
+
+    return results
+
+def predict_SUA(num_arteries, num_veins):
+    if num_arteries == 1 and num_veins == 1:
+        return "SUA"
+    elif num_arteries == 2 and num_veins == 1:
+        return "Normal"
+    else: 
+        return "Uncertain"
+
 
 
 # Load image
@@ -182,7 +217,7 @@ image_np = np.array(img)
 # Copy to draw contours
 overlay = image_np.copy()
 
-logits, preds = predict_model(img)
+logits, preds = run_model(img)
 
 generate_prediction_overlay(preds)
 

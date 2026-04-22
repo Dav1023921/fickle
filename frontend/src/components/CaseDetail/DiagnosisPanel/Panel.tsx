@@ -208,7 +208,6 @@ const CordSection = ({ index, cord, onChange }: CordSectionProps) => {
 
 const Panel = ({ pipelineOutput }: PanelProps) => {
   const [cords, setCords] = useState<CordState[]>([]);
-  const overallDiagnostic = pipelineOutput?.diagnostic;
 
   useEffect(() => {
     setCords(buildCordStates(pipelineOutput?.polygons ?? []));
@@ -226,19 +225,10 @@ const Panel = ({ pipelineOutput }: PanelProps) => {
         <Stack direction="row" spacing={1} alignItems="center">
           <LightbulbIcon fontSize="small" sx={{ color: 'white' }} />
           <Typography variant="body2" fontWeight={500} sx={{ color: 'white' }}>
-            AI Diagnosis Suggestion
+            AI Findings
           </Typography>
         </Stack>
       </Box>
-
-      {/* overall diagnostic */}
-      <Box sx={{ py: 2, textAlign: 'center' }}>
-        <Typography variant="h3" fontWeight={500} color={diagnosticColor(overallDiagnostic)}>
-          {overallDiagnostic ?? '—'}
-        </Typography>
-      </Box>
-
-      <Divider />
 
       {/* per cord sections */}
       {cords.length === 0
@@ -252,7 +242,6 @@ const Panel = ({ pipelineOutput }: PanelProps) => {
             </Box>
           ))
       }
-
       <Divider />
   </Card>
   );
