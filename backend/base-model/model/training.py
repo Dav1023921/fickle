@@ -15,7 +15,7 @@ from torchmetrics.classification import (
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
-
+PATIENCE = 10
 #–--- Instantiate the Dataset ------------------------------------------------
 
 # Make lists of corresponding image and mask paths
@@ -52,8 +52,8 @@ batch_size = 5
 epochs = 70
 
 # -- Loss Function ----------------------------------------------------------------
-class_weights = torch.tensor([0.5, 2.5, 2.5, 1.0, 1.0]).to(device)
-loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
+
+loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
 
 # -- Evaluation Metrics  ----------------------------------------------------------------
 iou_metric       = MulticlassJaccardIndex(num_classes=5, average="none", ignore_index=255).to(device)
@@ -62,8 +62,6 @@ dice_metric      = MulticlassF1Score(num_classes=5, average="none", ignore_index
 # --- History for plotting ---
 train_losses = []
 val_losses   = []
-val_dices    = []
-val_ious     = []
 
 # -- Training ----------------------------------------------------------------------------
 
@@ -144,16 +142,6 @@ def plot_training_curves():
     axes[0].set_xlabel("Epoch")
     axes[0].legend()
 
-    axes[1].plot(epochs_range, val_dices, label="Val Dice", color="green")
-    axes[1].set_title("Validation Dice Score")
-    axes[1].set_xlabel("Epoch")
-    axes[1].legend()
-
-    axes[2].plot(epochs_range, val_ious, label="Val IoU", color="orange")
-    axes[2].set_title("Validation IoU")
-    axes[2].set_xlabel("Epoch")
-    axes[2].legend()
-
     plt.tight_layout()
     plt.savefig("training_curves.png", dpi=150)
     plt.show()
@@ -181,6 +169,7 @@ best_val_dice = 0.0
 best_model_state = None
 
 # Training ---------------------------------------------------------------
+epochs_without_improvement = 0
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
 
@@ -189,11 +178,20 @@ for t in range(epochs):
     print("Mean Loss:", train_loss)
 
     print("\nValidation results")
-    val_loss, val_dice = test_loop(val_dataloader, model)
+    val_loss, val_dice, val_iou = test_loop(val_dataloader, model)
 
     if val_dice > best_val_dice:
         best_val_dice = val_dice
         best_model_state = model.state_dict().copy()
+        epochs_without_improvement = 0
+    else:
+        epochs_without_improvement += 1
+        if epochs_without_improvement >= PATIENCE:
+            print(f"\nEarly stopping triggered after {t+1} epochs.")
+            break
+    
+    train_losses.append(train_loss)
+    val_losses.append(val_loss)
 
 # --- Final evaluation on test set -----------------------------
 model.load_state_dict(best_model_state)
