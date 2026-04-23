@@ -26,11 +26,11 @@ img_files = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(".jpg")
 
 img_paths, mask_paths = [], []
 for f in img_files:
-    stem = os.path.splitext(f)[0]
-    mp = os.path.join(mask_dir, stem + ".png")
-    if os.path.exists(mp):
+    case_number = os.path.splitext(f)[0]
+    mask_paths = os.path.join(mask_dir, case_number + ".png")
+    if os.path.exists(mask_paths):
         img_paths.append(os.path.join(img_dir, f))
-        mask_paths.append(mp)
+        mask_paths.append(mask_paths)
     else:
         print("Missing mask for:", f)
 
