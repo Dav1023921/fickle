@@ -15,13 +15,6 @@ color_map = {
     (10, 10, 10): 0, # Ignore
 }
 
-# def pad_to_512(img, width, height, fill):
-#     pad_w = max(0, 512 - width)
-#     pad_h = max(0, 512 - height)
-#     # pad the image
-#     img = F.pad(img, (0, 0, pad_w, pad_h), fill=fill)
-#     return img
-
 def rgb_to_mask(mask_rgb, color_map):
     h, w, _ = mask_rgb.shape
 
@@ -43,17 +36,10 @@ class FickDataSet(Dataset):
     def __len__(self):
         return len(self.img_paths)
 
-    def __getitem__(self, idx):
-        # patching dimensions
-        dim = 512
-
+    def __getitem__(self, idx): 
         # Converting images into RGB
         img = Image.open(self.img_paths[idx]).convert("RGB")
         mask_rgb = Image.open(self.mask_paths[idx]).convert("RGB")
-        # Pad if necessary
-        # width, height = img.size
-        # img = pad_to_512(img, width, height, 0)
-        # mask_rgb = pad_to_512(mask_rgb,width, height, (10,10,10))
 
         # Converting an RGB mask to segmentation Mask
         mask_rgb = np.array(mask_rgb, dtype=np.uint8)

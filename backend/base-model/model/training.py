@@ -1,7 +1,7 @@
 import segmentation_models_pytorch as smp
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision import datasets
 from torchvision.transforms import ToTensor
 from myunet import make_model
@@ -14,31 +14,10 @@ from torchmetrics.classification import (
 )
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import numpy as np
 
 PATIENCE = 10
-#–--- Instantiate the Dataset ------------------------------------------------
 
-# Make lists of corresponding image and mask paths
-img_dir = "../dataset/images"
-mask_dir = "../dataset/masks"
-
-img_files = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(".jpg")])
-
-img_paths, mask_paths = [], []
-for f in img_files:
-    case_number = os.path.splitext(f)[0]
-    mask_paths = os.path.join(mask_dir, case_number + ".png")
-    if os.path.exists(mask_paths):
-        img_paths.append(os.path.join(img_dir, f))
-        mask_paths.append(mask_paths)
-    else:
-        print("Missing mask for:", f)
-
-dataset = FickDataSet(
-    img_paths=img_paths,
-    mask_paths=mask_paths,
-    img_tf=ToTensor(),   # simple for now
-)
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -144,22 +123,46 @@ def plot_training_curves():
 
     plt.tight_layout()
     plt.savefig("training_curves.png", dpi=150)
-    plt.show()
-    print("Saved training_curves.png")
 
 
-# -- Training Validation Test Split ---------------------------------------------------------------------------
-n = len(dataset)
-n_train = int(0.7 * n)
-n_val = int(0.15 * n)
-n_test = n - n_train - n_val
 
-train_set, val_set, test_set = random_split(dataset, [n_train, n_val, n_test])
+#---- Instantiate the Dataset ------------------------------------------------
 
-# -- Creating Dataloader ---------------------------------------------------------------------------
+def load_pairs(img_dir, mask_dir):
+    img_paths, mask_paths = [], []
+    for f in sorted(os.listdir(img_dir)):
+        if not f.lower().endswith(".jpg"):
+            continue
+        base = os.path.splitext(f)[0]
+        mask_path = os.path.join(mask_dir, base + ".png")
+        if os.path.exists(mask_path):
+            img_paths.append(os.path.join(img_dir, f))
+            mask_paths.append(mask_path)
+        else:
+            print("Missing mask for:", f)
+    return img_paths, mask_paths
+
+# Load test set (fixed, never touched during training)
+test_imgs, test_masks = load_pairs("../dataset/split/test/images", "../dataset/split/test/masks")
+test_set = FickDataSet(img_paths=test_imgs, mask_paths=test_masks, img_tf=ToTensor())
+
+# Load train folder and split into train/val
+all_imgs, all_masks = load_pairs("../dataset/split/train/images", "../dataset/split/train/masks")
+full_train = FickDataSet(img_paths=all_imgs, mask_paths=all_masks, img_tf=ToTensor())
+
+n       = len(full_train)
+n_val   = int(0.15 * n)
+n_train = n - n_val
+
+generator = torch.Generator().manual_seed(42)
+train_set, val_set = random_split(full_train, [n_train, n_val], generator=generator)
+
+print(f"Train: {len(train_set)} | Val: {len(val_set)} | Test: {len(test_set)}")
+
+# -- Creating Dataloaders ------------------------------------------------
 train_dataloader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
-test_dataloader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
+val_dataloader   = DataLoader(val_set,   batch_size=batch_size, shuffle=False)
+test_dataloader  = DataLoader(test_set,  batch_size=batch_size, shuffle=False)
 
 # Initialise an instance of the model
 model = make_model().to(device)

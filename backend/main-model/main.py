@@ -56,29 +56,25 @@ def run_pipeline(image):
         else:
             return "Uncertain"
 
-
     ## Run Stage 1 ## 
-    image, logits, pred_mask, cord_confidence_map  = stage1.run_model(image)
+    image, logits, pred_mask  = stage1.run_model(image)
     ## Get the crops from stage 1 ##
     cord_instances = stage1.make_all_instance_crops(
         image=image,
         pred_mask=pred_mask,
-        confidence_map=cord_confidence_map,
 
         foreground_class=1,
         min_area=2000,
     )
-    # [["Cord Polygon", [[Polygon 1, Area, Max Diam], [Polygon 2, Area, Max Diam], [Polygon 3, Area, Max Diam]], "Cord Polygon", [Polygon 1, Polygon 2, Polygon 3]]
     polygons = []
     ## For each crop in stage 1 ##
     for c_instance in cord_instances:
         ## Run Stage 2 ## 
-        image, logits, pred_mask, vessel_confidence_map = stage2.run_model(c_instance["crop"])
+        image, logits, pred_mask = stage2.run_model(c_instance["crop"])
         ## Make the vessel crops for each cord instance ##
         vessel_instances = stage2.make_all_instance_crops(
                 image=image,
                 pred_mask=pred_mask,
-                confidence_map=vessel_confidence_map,
                 foreground_class=1,
                 min_area=2000,
             )
@@ -105,7 +101,7 @@ def run_pipeline(image):
                 "polygon": polygon_global,
                 "area": v_instance["area"],
                 "type": vessel_type,
-                "heatmap": v_instance.get("heatmap", None),
+                "confidence": float(confidence),  
             })
             vessel_confidences.append({
                 "vessel_seg_confidence": v_instance.get("confidence", 0.0),
@@ -120,10 +116,11 @@ def run_pipeline(image):
         #############################################
         polygons.append({
             "polygon": c_instance["polygon"],
+            "diameter": c_instance["feret_diameter_px"],
+            "start_end_points": (c_instance["feret_p1"], c_instance["feret_p2"]),
             "vessels": vessel_info,
-            "diameter": max(c_instance["width"], c_instance["height"]),
             "confidence": cord_confidence,
-            "heatmap": c_instance.get("heatmap", None),
+
         })
         ## Make Diagnostic ##############################
         c_instance["diagnostic"] = predict_sua(vessel_types)

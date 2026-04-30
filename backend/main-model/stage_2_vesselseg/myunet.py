@@ -10,4 +10,3 @@ def make_model():
         classes=1,
     )
     return model
-

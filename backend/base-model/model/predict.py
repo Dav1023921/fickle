@@ -1,4 +1,6 @@
 from io import BytesIO
+import os
+from tabnanny import check
 
 from PIL import Image
 import torchvision.transforms as T
@@ -33,7 +35,7 @@ def generate_entropy_map(logits: torch.Tensor, normalize: bool = True, image=Non
         entropy = entropy / torch.log(torch.tensor(num_classes, device=logits.device).float())
 
     plt.figure(figsize=(6,6))
-    plt.imshow(img)
+    plt.imshow(image)
     plt.imshow(entropy[0], cmap="magma", alpha=0.35)
     plt.axis("off")
     plt.title("Model Uncertainty")
@@ -154,22 +156,6 @@ def generate_entropy_overlay(logits, normalize: bool = True, alpha: float = 0.45
 
     return buffer
 
-def run_model(img):
-    model = make_model()
-    model.load_state_dict(torch.load("unet_resnet34.pth"))
-    model.eval()
-
-    transform = T.Compose([
-        T.ToTensor(),
-    ])
-
-    x = transform(img).unsqueeze(0)
-
-    with torch.no_grad():
-        logits = model(x)
-        preds = torch.argmax(logits, dim=1)
-    
-    return logits, preds
 
 def post_process(preds):
     results = []
@@ -208,20 +194,69 @@ def predict_SUA(num_arteries, num_veins):
     else: 
         return "Uncertain"
 
+def run_model(img):
+    model = make_model()
+    model.load_state_dict(torch.load("unet_resnet34_v1.pth", map_location="cpu"))
+    model.eval()
 
+    transform = T.Compose([
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406],
+                     std=[0.229, 0.224, 0.225]),
+    ])
+
+    x = transform(img).unsqueeze(0)
+
+    with torch.no_grad():
+        logits = model(x)
+        preds = torch.argmax(logits, dim=1)
+
+    return logits, preds
+
+def main():
+    test_dir = os.path.join(os.path.dirname(__file__), "..", "dataset", "split", "test", "images")
+    test_dir = os.path.abspath(test_dir)
+
+    os.makedirs("outputs", exist_ok=True)
+
+    for fname in sorted(os.listdir(test_dir)):
+        if not fname.lower().endswith((".jpg", ".png", ".jpeg")):
+            continue
+
+        print(f"Processing {fname}...")
+        img_path = os.path.join(test_dir, fname)
+        img = Image.open(img_path).convert("RGB")
+        image_np = np.array(img)
+
+        logits, preds = run_model(img)
+
+        # Save entropy/uncertainty map
+        generate_entropy_map(logits, normalize=True, image=img)
+        os.rename("uncertainty.png", f"outputs/{fname}_entropy.png")
+
+        # # Save contours
+        # overlay = image_np.copy()
+        # draw_multiclass_contours(logits, overlay)
+        # os.rename("contours.png", f"outputs/{fname}_contours.png")
+
+        print(f"  Done — saved to outputs/")
+
+
+if __name__ == "__main__":
+    main()
 
 # Load image
-img = Image.open("../dataset/images/case232.jpg").convert("RGB")
-image_np = np.array(img) 
+# img = Image.open("../dataset/images/case232.jpg").convert("RGB")
+# image_np = np.array(img) 
 
-# Copy to draw contours
-overlay = image_np.copy()
+# # Copy to draw contours
+# overlay = image_np.copy()
 
-logits, preds = run_model(img)
+# logits, preds = run_model(img)
 
-generate_prediction_overlay(preds)
+# generate_prediction_overlay(preds)
 
-generate_entropy_map(logits, True, img)
+# generate_entropy_map(logits, True, img)
 
 # Generate the entropy confidence map
 # generate_entropy_map(logits, True, img)
@@ -232,4 +267,4 @@ generate_entropy_map(logits, True, img)
 # Image.fromarray(rgb_mask).save("prediction.png")
 
 # Generate contour map
-contour_map = draw_multiclass_contours(logits, overlay)
+# contour_map = draw_multiclass_contours(logits, overlay)

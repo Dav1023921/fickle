@@ -1,40 +1,36 @@
 import copy
 import segmentation_models_pytorch as smp
 import torch
-from torch import nn
 from torch.utils.data import DataLoader
-from torchvision import datasets
 from torchvision.transforms import ToTensor
 from myunet import make_model
 from dataset import FickDataSet
 import os
 from torch.utils.data import random_split
-from torchmetrics.classification import MulticlassJaccardIndex, MulticlassF1Score
-import torch.nn.functional as F
 from torchmetrics.classification import BinaryJaccardIndex, BinaryF1Score
 
 
 import torch
 
+# Early stopping. Stops training if validation dice does not improve for 10 epochs.
 class EarlyStopping:
-    def __init__(self, patience=10, min_delta=0.001):
+    def __init__(self, patience=10):
         self.patience = patience
-        self.min_delta = min_delta
         self.counter = 0
         self.best_dice = 0.0
 
     def step(self, val_dice):
-        if val_dice > self.best_dice + self.min_delta:
+        if val_dice > self.best_dice:
             self.best_dice = val_dice
             self.counter = 0
-            return False  # don't stop
         else:
             self.counter += 1
-            return self.counter >= self.patience  # stop if True
+        return self.counter >= self.patience
         
 print(torch.backends.mps.is_available())
 
-# Training ################################################
+# Training #
+
 def train_loop(train_dataloader, model, optimizer):
     model.train()
     running_loss = 0.0
@@ -77,8 +73,8 @@ def test_loop(test_dataloader, model):
                 y = torch.argmax(y, dim=1)
 
             logits = model(X)
-            preds = (torch.sigmoid(logits) > 0.5).long().squeeze(1)  # [8, 512, 512]
-            y_long = y.long()  # [8, 512, 512] for metrics
+            preds = (torch.sigmoid(logits) > 0.5).long().squeeze(1)
+            y_long = y.long()
 
             loss = combined_loss(logits, y.float().unsqueeze(1))
             running_loss += loss.item()
@@ -97,6 +93,7 @@ def test_loop(test_dataloader, model):
 
 if __name__ == '__main__':
     ## paths to the image files #########
+    # Change the paths to relative paths (since your dataset is in the same project folder)
     img_dir  = "vessel-dataset/images"
     mask_dir = "vessel-dataset/masks"
 
@@ -132,7 +129,6 @@ if __name__ == '__main__':
     epochs = 50
 
     # Evaluation metrics #######################################
-    # ignore_index=255 ignores values of 255 in the mask
     bce_loss = torch.nn.BCEWithLogitsLoss()
     dice_loss = smp.losses.DiceLoss(mode='binary')
 
@@ -141,8 +137,6 @@ if __name__ == '__main__':
 
     iou_metric  = BinaryJaccardIndex().to(device)
     dice_metric = BinaryF1Score().to(device)
-
-
 
     # -----------------------------
     ## Split into train / validation / test #######
@@ -166,7 +160,7 @@ if __name__ == '__main__':
     best_val_dice = 0.0
     best_model_state = None
 
-    early_stopping = EarlyStopping(patience=10, min_delta=0.001)
+    early_stopping = EarlyStopping(patience=10)
     # Training 
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
@@ -197,5 +191,4 @@ if __name__ == '__main__':
     torch.save(model.state_dict(), "unet_resnet34.pth")
 
     print("Done!")
-
 

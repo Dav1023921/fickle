@@ -1,250 +1,244 @@
-import { useState, useEffect } from 'react';
-import Card from '@mui/material/Card';
-import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
 import Divider from '@mui/material/Divider';
-import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
 import IconButton from '@mui/material/IconButton';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import type { CordPolygon, PipelineResult as PipelineOutput } from '../../../CasesContext';
 
-type VesselInfo = {
-  polygon: number[];
-  area: number;
-  type: string;
-};
-
-type CordPolygon = {
-  polygon: number[];
-  vessels: VesselInfo[];
-  diameter: number;
-  confidence: number;  // add this
-};
-
-export interface PipelineOutput {
-  polygons: CordPolygon[];
-  number_of_cords: number;
-  sua: boolean;
-  diagnostic: 'Normal' | 'SUA' | 'Uncertain';
-  confidence: number;  // add this
-}
-
-interface PanelProps {
-  pipelineOutput?: PipelineOutput;
-}
-
-// ─── types ────────────────────────────────────────────────────────────────────
-
-interface CordState {
+type ReportedCounts = {
   arteries: number;
   veins: number;
-  diameter: number;
-  diagnostic: 'Normal' | 'SUA' | 'Uncertain';
-  confidence: number;  
+  diagnosticOverride?: 'Normal' | 'SUA' | 'Uncertain' | null;
+};
+
+interface PanelProps {
+  polygons: CordPolygon[];
+  onPolygonsChange: (polygons: CordPolygon[]) => void;
+  pipelineOutput?: PipelineOutput;
+  hoveredCordIndex: number | null;
+  onCordHover: (index: number | null) => void;
+  reportedCounts: ReportedCounts[];
+  onReportedCountsChange: (counts: ReportedCounts[]) => void;
+  onAddCord: () => void;
+  onDeleteCord: (index: number) => void;
 }
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
-
-function cordDiagnostic(arteries: number, veins: number): 'Normal' | 'SUA' | 'Uncertain' {
-  if (arteries === 2 && veins === 1) return 'Normal';
-  if (arteries === 1 && veins === 1) return 'SUA';
+function cordDiagnostic(a: number, v: number): 'Normal' | 'SUA' | 'Uncertain' {
+  if (a === 2 && v === 1) return 'Normal';
+  if (a === 1 && v === 1) return 'SUA';
   return 'Uncertain';
 }
 
-function buildCordStates(polygons: CordPolygon[]): CordState[] {
-  return polygons.map(cord => {
-    const arteries = cord.vessels.filter(v => v.type === 'Artery').length;
-    const veins    = cord.vessels.filter(v => v.type === 'Vein').length;
-    return {
-      arteries,
-      veins,
-      diameter: Math.round(cord.diameter),
-      diagnostic: cordDiagnostic(arteries, veins),
-      confidence: cord.confidence,  // add this
-    };
-  });
+const diagBg    = (d: string) => d === 'Normal' ? '#dcfce7' : d === 'SUA' ? '#fee2e2' : '#fef9c3';
+const diagBorder = (d: string) => d === 'Normal' ? '#16a34a' : d === 'SUA' ? '#dc2626' : '#ca8a04';
+const diagText  = (d: string) => d === 'Normal' ? '#15803d' : d === 'SUA' ? '#b91c1c' : '#a16207';
+const confColor = (c: number) => c >= 80 ? '#15803d' : c >= 50 ? '#b45309' : '#b91c1c';
+
+function Spinner({ label, color, value, onChange }: {
+  label: string; color: string; value: number; onChange: (v: number) => void;
+}) {
+  return (
+    <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.75}>
+      <Stack direction="row" alignItems="center" gap={0.75}>
+        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color }} />
+        <Typography fontSize={12}>{label}</Typography>
+      </Stack>
+      <Stack direction="row" alignItems="center" gap={0.25}>
+        <Typography fontWeight={600} fontSize={13} sx={{ minWidth: 20, textAlign: 'center' }}>{value}</Typography>
+        <Stack>
+          <IconButton size="small" sx={{ p: 0 }} onClick={() => onChange(value + 1)}>
+            <KeyboardArrowUpIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+          <IconButton size="small" sx={{ p: 0 }} onClick={() => onChange(Math.max(0, value - 1))}>
+            <KeyboardArrowDownIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Stack>
+      </Stack>
+    </Stack>
+  );
 }
 
-const diagnosticColor = (d?: string) =>
-  d === 'Normal' ? 'success.main' : d === 'SUA' ? 'error.main' : 'warning.main';
-
-// ─── editable row ─────────────────────────────────────────────────────────────
-
-const EditableRow = ({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) => (
-  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
-    <Typography variant="body2" color="text.secondary">{label}</Typography>
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <Box
-        component="input"
-        type="number"
-        value={value}
-        onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
-        sx={{
-          bgcolor: 'grey.100',
-          borderRadius: 1,
-          px: 1.5,
-          py: 0.25,
-          width: 64,
-          textAlign: 'center',
-          border: 'none',
-          outline: 'none',
-          fontFamily: 'inherit',
-          color: 'text.primary',
-          fontSize: '0.875rem',
-          fontWeight: 500,
-          cursor: 'text',
-          '&:focus': { bgcolor: 'grey.200', outline: '2px solid', outlineColor: 'primary.main' },
-          '&::-webkit-inner-spin-button': { display: 'none' },
-          '&::-webkit-outer-spin-button': { display: 'none' },
-        }}
-      />
-      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-        <IconButton size="small" sx={{ p: 0 }} onClick={() => onChange(value + 1)}>
-          <KeyboardArrowUpIcon fontSize="small" />
-        </IconButton>
-        <IconButton size="small" sx={{ p: 0 }} onClick={() => onChange(Math.max(0, value - 1))}>
-          <KeyboardArrowDownIcon fontSize="small" />
-        </IconButton>
-      </Box>
-    </Box>
-  </Box>
-);
-
-const DiameterRow = ({ value, onChange }: { value: number; onChange: (v: number) => void }) => (
-  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
-    <Typography variant="body2" color="text.secondary">Diameter</Typography>
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'grey.100', borderRadius: 1, px: 1.5, py: 0.25 }}>
-        <Box
-          component="input"
-          type="number"
-          value={value}
-          onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
-          sx={{
-            bgcolor: 'transparent',
-            border: 'none',
-            outline: 'none',
-            fontFamily: 'inherit',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            width: 48,
-            color: 'text.primary',
-            textAlign: 'center',
-            '&::-webkit-inner-spin-button': { display: 'none' },
-            '&::-webkit-outer-spin-button': { display: 'none' },
-          }}
-        />
-        <Typography variant="body2" fontWeight={500}>px</Typography>
-      </Box>
-      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-        <IconButton size="small" sx={{ p: 0 }} onClick={() => onChange(value + 1)}>
-          <KeyboardArrowUpIcon fontSize="small" />
-        </IconButton>
-        <IconButton size="small" sx={{ p: 0 }} onClick={() => onChange(Math.max(0, value - 1))}>
-          <KeyboardArrowDownIcon fontSize="small" />
-        </IconButton>
-      </Box>
-    </Box>
-  </Box>
-);
-
-// ─── cord section ─────────────────────────────────────────────────────────────
-
-interface CordSectionProps {
+function CordCard({ index, cord, reported, isHovered, onReportedChange, onCordChange, onDelete, onMouseEnter, onMouseLeave }: {
   index: number;
-  cord: CordState;
-  onChange: (updated: CordState) => void;
-}
-
-const CordSection = ({ index, cord, onChange }: CordSectionProps) => {
-  const handleArteries = (v: number) => {
-    const updated = { ...cord, arteries: v, diagnostic: cordDiagnostic(v, cord.veins) };
-    onChange(updated);
-  };
-  const handleVeins = (v: number) => {
-    const updated = { ...cord, veins: v, diagnostic: cordDiagnostic(cord.arteries, v) };
-    onChange(updated);
-  };
-  const handleDiameter = (v: number) => onChange({ ...cord, diameter: v });
+  cord: CordPolygon;
+  reported: ReportedCounts;
+  isHovered: boolean;
+  onReportedChange: (r: ReportedCounts) => void;
+  onCordChange: (c: CordPolygon) => void;
+  onDelete: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+}) {
+  const isManual   = cord.vessels.length === 0 && cord.polygon.length === 0;
+  const aiDiag     = cordDiagnostic(
+    cord.vessels.filter(v => v.type === 'Artery').length,
+    cord.vessels.filter(v => v.type === 'Vein').length,
+  );
+  const repDiag    = cordDiagnostic(reported.arteries, reported.veins);
+  const activeDiag = reported.diagnosticOverride ?? repDiag;
 
   return (
-       <Box sx={{ px: 2.5, py: 2 }}>
-      {/* cord header */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-        <Typography variant="caption" fontWeight={600} color="text.secondary"
-          sx={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Cord {index + 1}
+    <Box
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      sx={{
+        borderLeft: isHovered ? '3px solid #facc15' : '3px solid transparent',
+        bgcolor: isHovered ? 'rgba(250,204,21,0.05)' : 'transparent',
+        transition: 'background-color 0.15s',
+      }}
+    >
+      {/* Card header */}
+      <Stack direction="row" alignItems="center" justifyContent="space-between"
+        sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Typography fontSize={11} fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Cord {index + 1}{isManual && <span style={{ fontWeight: 400, marginLeft: 4 }}>(manual)</span>}
         </Typography>
-        <Typography variant="body2" fontWeight={600} color={diagnosticColor(cord.diagnostic)}>
-          {cord.diagnostic}
-        </Typography>
+        <IconButton size="small" onClick={onDelete} sx={{ color: '#dc2626', p: 0.25 }}>
+          <DeleteIcon sx={{ fontSize: 14 }} />
+        </IconButton>
       </Stack>
 
-      <EditableRow label="Arteries" value={cord.arteries} onChange={handleArteries} />
-      <EditableRow label="Veins"    value={cord.veins}    onChange={handleVeins} />
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
-        <Typography variant="body2" color="text.secondary">Total vessels</Typography>
-        <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 1.5, py: 0.25, minWidth: 64, textAlign: 'center' }}>
-          <Typography variant="body2" fontWeight={500}>{cord.arteries + cord.veins}</Typography>
-        </Box>
-      </Box>
-      <DiameterRow value={cord.diameter} onChange={handleDiameter} />
+      {/* Two columns */}
+      <Stack direction="row" divider={<Divider orientation="vertical" flexItem />}>
 
-      {/* cord confidence */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
-        <Typography variant="body2" color="text.secondary">Confidence</Typography>
-        <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 1.5, py: 0.25, minWidth: 64, textAlign: 'center' }}>
-          <Typography variant="body2" fontWeight={500}>
-            {Math.round(cord.confidence * 100)}%
+        {/* LEFT — AI suggestions (read-only) */}
+        <Box sx={{ flex: 1, px: 1.5, py: 1 }}>
+          <Typography fontSize={10} color="text.disabled" fontWeight={600}
+            sx={{ textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}>
+            AI detected
           </Typography>
+
+          {isManual ? (
+            <Typography fontSize={11} color="text.disabled">No model data</Typography>
+          ) : cord.vessels.length === 0 ? (
+            <Typography fontSize={11} color="text.disabled">None detected</Typography>
+          ) : (
+            cord.vessels.map((v, i) => {
+              const conf = v.confidence !== undefined ? Math.round(v.confidence * 100) : null;
+              return (
+                <Stack key={i} direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
+                  <Stack direction="row" alignItems="center" gap={0.75}>
+                    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: v.type === 'Artery' ? '#ef4444' : '#3b82f6' }} />
+                    <Typography fontSize={11} color="text.secondary">{v.type} {i + 1}</Typography>
+                  </Stack>
+                  {conf !== null && (
+                    <Typography fontSize={11} fontWeight={600} sx={{ color: confColor(conf), fontFamily: 'monospace' }}>
+                      {conf}%
+                    </Typography>
+                  )}
+                </Stack>
+              );
+            })
+          )}
+
+          {/* AI suggestion badge */}
+          {!isManual && (
+            <Box sx={{
+              mt: 1, display: 'inline-block',
+              px: 0.75, py: 0.25,
+              bgcolor: diagBg(aiDiag),
+              border: `1px solid ${diagBorder(aiDiag)}`,
+              borderRadius: 0.5,
+            }}>
+              <Typography fontSize={10} fontWeight={700} sx={{ color: diagText(aiDiag) }}>
+                {aiDiag}
+              </Typography>
+            </Box>
+          )}
         </Box>
-      </Box>
+
+        {/* RIGHT — To be reported (editable) */}
+        <Box sx={{ flex: 1, px: 1.5, py: 1 }}>
+          <Typography fontSize={10} color="text.disabled" fontWeight={600}
+            sx={{ textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}>
+            To report
+          </Typography>
+
+          <Spinner label="Arteries" color="#ef4444" value={reported.arteries}
+            onChange={v => onReportedChange({ ...reported, arteries: v })} />
+          <Spinner label="Veins" color="#3b82f6" value={reported.veins}
+            onChange={v => onReportedChange({ ...reported, veins: v })} />
+            {/* Diameter — read from cord, shown as read-only */}
+          {cord.diameter > 0 && (
+            <Stack direction="row" alignItems="center" justifyContent="space-between" mt={0.5}>
+              <Typography fontSize={12} color="text.secondary">Diameter</Typography>
+              <Stack direction="row" alignItems="center" gap={0.5}>
+                <Typography fontWeight={600} fontSize={13}>{Math.round(cord.diameter)}</Typography>
+                <Typography fontSize={11} color="text.disabled">px</Typography>
+              </Stack>
+            </Stack>
+          )}
+
+          <Select size="small" fullWidth value={activeDiag}
+            onChange={e => onReportedChange({
+              ...reported,
+              diagnosticOverride: e.target.value === repDiag ? null : e.target.value as 'Normal' | 'SUA' | 'Uncertain',
+            })}
+            sx={{
+              mt: 1, fontSize: 11, fontWeight: 700,
+              color: diagText(activeDiag),
+              bgcolor: diagBg(activeDiag),
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: diagBorder(activeDiag) },
+            }}
+          >
+            <MenuItem value="Normal">Normal</MenuItem>
+            <MenuItem value="SUA">SUA</MenuItem>
+            <MenuItem value="Uncertain">Uncertain</MenuItem>
+          </Select>
+        </Box>
+      </Stack>
     </Box>
   );
-};
+}
 
-// ─── panel ────────────────────────────────────────────────────────────────────
-
-const Panel = ({ pipelineOutput }: PanelProps) => {
-  const [cords, setCords] = useState<CordState[]>([]);
-
-  useEffect(() => {
-    setCords(buildCordStates(pipelineOutput?.polygons ?? []));
-  }, [pipelineOutput]);
-
-  const handleCordChange = (i: number, updated: CordState) => {
-    setCords(prev => prev.map((c, j) => j === i ? updated : c));
-  };
-
+export default function DiagnosisPanel({
+  polygons, onPolygonsChange, hoveredCordIndex, onCordHover,
+  reportedCounts, onReportedCountsChange, onAddCord, onDeleteCord,
+}: PanelProps) {
   return (
-    <Card variant="outlined" sx={{ width: '100%', minWidth: 320, maxWidth: 460, borderRadius: 2, overflowY: 'auto' }}>
-
-      {/* header */}
-      <Box sx={{ bgcolor: '#1a1a1a', px: 2, py: 1.25 }}>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <LightbulbIcon fontSize="small" sx={{ color: 'white' }} />
-          <Typography variant="body2" fontWeight={500} sx={{ color: 'white' }}>
-            AI Findings
-          </Typography>
+    <Card variant="outlined" sx={{ width: '100%', minWidth: 300, borderRadius: 2, overflow: 'visible', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <Stack direction="row" alignItems="center" justifyContent="space-between"
+        sx={{ px: 2, py: 1.25, bgcolor: '#1a1a1a', flexShrink: 0 }}>
+        <Stack direction="row" alignItems="center" gap={1}>
+          <LightbulbIcon sx={{ color: 'white', fontSize: 16 }} />
+          <Typography fontSize={13} fontWeight={600} color="white">AI Findings</Typography>
         </Stack>
-      </Box>
+        <Button size="small" startIcon={<AddIcon />} onClick={onAddCord}
+          sx={{ color: 'white', borderColor: '#555', fontSize: 11, textTransform: 'none', border: '1px solid #555', px: 1 }}>
+          Add Cord
+        </Button>
+      </Stack>
 
-      {/* per cord sections */}
-      {cords.length === 0
-        ? <Box sx={{ px: 2.5, py: 2 }}>
-            <Typography variant="body2" color="text.disabled">No cords detected</Typography>
+      {/* Cord cards */}
+      {polygons.length === 0
+        ? <Box sx={{ px: 2, py: 3 }}><Typography fontSize={13} color="text.disabled">No cords detected</Typography></Box>
+        : polygons.map((cord, i) => (
+          <Box key={i}>
+            <CordCard
+              index={i}
+              cord={cord}
+              reported={reportedCounts[i] ?? { arteries: 0, veins: 0 }}
+              isHovered={hoveredCordIndex === i}
+              onReportedChange={u => onReportedCountsChange(reportedCounts.map((r, j) => j === i ? u : r))}
+              onCordChange={u => onPolygonsChange(polygons.map((c, j) => j === i ? u : c))}
+              onDelete={() => onDeleteCord(i)}
+              onMouseEnter={() => onCordHover(i)}
+              onMouseLeave={() => onCordHover(null)}
+            />
+            {i < polygons.length - 1 && <Divider />}
           </Box>
-        : cords.map((cord, i) => (
-            <Box key={i}>
-              <CordSection index={i} cord={cord} onChange={(u) => handleCordChange(i, u)} />
-              {i < cords.length - 1 && <Divider />}
-            </Box>
-          ))
+        ))
       }
-      <Divider />
-  </Card>
+    </Card>
   );
-};
-
-export default Panel;
+}

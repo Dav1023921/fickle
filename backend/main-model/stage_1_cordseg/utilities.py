@@ -4,6 +4,7 @@ from myunet import make_model
 import numpy as np
 import cv2
 import os
+from PIL import Image
 
 
 IGNORE_RGB = (10, 10, 10)
@@ -21,8 +22,11 @@ def run_model(img):
     model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
     model.eval()
 
-    # convert to tensor
-    x = T.ToTensor()(img).unsqueeze(0)
+    # convert to tensor and apply ImageNet normalisation to match training
+    x = T.Compose([
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])(img).unsqueeze(0)
 
     with torch.no_grad():
         logits = model(x)
@@ -65,7 +69,7 @@ def semantic_to_instances(binary_mask, min_area=900):
         area = cv2.contourArea(cnt)
         circularity = float((4 * np.pi * area) / (perimeter ** 2)) if perimeter > 0 else 0.0
 
-        # CalculateFeret diameter endpoints
+        # Calculate Feret diameter endpoints
         pts = cnt.squeeze()
         if len(pts.shape) == 1:
             pts = pts.reshape(-1, 2)
@@ -76,15 +80,14 @@ def semantic_to_instances(binary_mask, min_area=900):
         p2 = pts[j].tolist()
         feret_diameter = float(distances[i, j])
 
-
         # Simplify contour for Konva rendering
-        epsilon = 0.005 * perimeter
+        epsilon = 0.006 * perimeter
         approx = cv2.approxPolyDP(cnt, epsilon, True)
         polygon = approx.squeeze(1).flatten().tolist()
 
         instances.append({
             "id": label_id,
-            "bbox": [x, y, x + w, y + h],   # x2, y2 are slice-style bounds
+            "bbox": [x, y, x + w, y + h],
             "mask": instance_mask,
             "polygon": polygon,
             "width": int(w),
@@ -95,75 +98,57 @@ def semantic_to_instances(binary_mask, min_area=900):
             "circularity": round(circularity, 4),
             # --- Feret Diameter
             "feret_diameter_px": round(feret_diameter, 2),
-            "feret_p1": p1,   # [x1, y1] — Konva line endpoint 1
-            "feret_p2": p2,   # [x2, y2] — Konva line endpoint 2
+            "feret_p1": p1,
+            "feret_p2": p2,
         })
-
-        
 
     return instances
 
-# Pad the image to 512x512 if it's smaller, using the specified fill value
-def choose_crop_size(bbox, small_size=512, large_size=768):
-    """
-    Choose crop size based on bbox size.
-
-    If the bbox fits inside 512, use 512.
-    Otherwise use 768.
-    """
-    x1, y1, x2, y2 = bbox
-    w = x2 - x1
-    h = y2 - y1
-
-    if max(w, h) <= small_size:
-        return small_size
-    return large_size
-
-# Given an instance_mask and bbox values and image get the crop
 def make_instance_crop(image, instance_mask, bbox, ignore_rgb=IGNORE_RGB):
 
     H, W = image.shape[:2]
     x1, y1, x2, y2 = bbox
-    crop_size = choose_crop_size(bbox)
+    crop_size = 512 
 
-    # Create isolated an copy of the image where only component pixels are visible and the rest is ignore_rgb
     isolated = np.full_like(image, ignore_rgb, dtype=np.uint8)
     isolated[instance_mask == 1] = image[instance_mask == 1]
 
-    # Center crop on component bbox center
     cx = (x1 + x2) // 2
     cy = (y1 + y2) // 2
 
-    crop_x1 = cx - crop_size // 2
-    crop_y1 = cy - crop_size // 2
-    crop_x2 = crop_x1 + crop_size
-    crop_y2 = crop_y1 + crop_size
+    bbox_w = x2 - x1
+    bbox_h = y2 - y1
+    natural_size = max(bbox_w, bbox_h, crop_size)
 
-    # Source region from original image
+    crop_x1 = cx - natural_size // 2
+    crop_y1 = cy - natural_size // 2
+    crop_x2 = crop_x1 + natural_size
+    crop_y2 = crop_y1 + natural_size
+
     src_x1 = max(0, crop_x1)
     src_y1 = max(0, crop_y1)
     src_x2 = min(W, crop_x2)
     src_y2 = min(H, crop_y2)
 
-    # Destination region inside fixed crop canvas
     dst_x1 = src_x1 - crop_x1
     dst_y1 = src_y1 - crop_y1
     dst_x2 = dst_x1 + (src_x2 - src_x1)
     dst_y2 = dst_y1 + (src_y2 - src_y1)
 
-    crop = np.full((crop_size, crop_size, 3), ignore_rgb, dtype=np.uint8)
+    crop = np.full((natural_size, natural_size, 3), ignore_rgb, dtype=np.uint8)
     crop[dst_y1:dst_y2, dst_x1:dst_x2] = isolated[src_y1:src_y2, src_x1:src_x2]
+
+    if natural_size != crop_size:
+        crop = cv2.resize(crop, (crop_size, crop_size), interpolation=cv2.INTER_LINEAR)
 
     return crop, crop_size, crop_x1, crop_y1
 
 # Return an array of dictionaries with the crops for each dict
 def make_all_instance_crops(image, pred_mask, foreground_class=1, min_area=2000):
 
-    # create a binary mask and run connected components to get instance masks and bboxes
     binary_mask = (pred_mask == foreground_class).astype(np.uint8)
     instances = semantic_to_instances(binary_mask, min_area=min_area)
 
-    # for each instance, make a fixed-size crop centered on the instance
     for inst in instances:
         crop, size, crop_x1, crop_y1 = make_instance_crop(
             image=image,
@@ -178,61 +163,56 @@ def make_all_instance_crops(image, pred_mask, foreground_class=1, min_area=2000)
 
     return instances
 
-def generate_cord_polygons(
-    pred_mask,
-    foreground_class=1,
-    min_area=20,
-    epsilon_ratio=0.01,
-):
-    """
-    Convert segmentation mask into simplified polygons for frontend (Konva).
 
-    Returns:
-        List of polygons, each as flat [x1, y1, x2, y2, ...]
-    """
+# ─── main ─────────────────────────────────────────────────────────────────────
+# Runs the model on every image in cord-dataset/split/test/images and saves
 
-    # ---- Convert to numpy ----
-    if hasattr(pred_mask, "cpu"):
-        mask = pred_mask.cpu().numpy()
-    else:
-        mask = np.asarray(pred_mask)
+if __name__ == "__main__":
+    base       = os.path.dirname(os.path.abspath(__file__))
+    input_dir  = os.path.join(base, "cord-dataset", "split", "test", "images")
+    output_dir = os.path.join(base, "cord-dataset", "split", "test", "morph_comparison")
+    os.makedirs(output_dir, exist_ok=True)
 
-    mask = mask.astype(np.uint8)
+    image_files = sorted([
+        f for f in os.listdir(input_dir)
+        if f.lower().endswith((".png", ".jpg", ".jpeg"))
+    ])
 
-    # ---- Binary mask ----
-    binary = (mask == foreground_class).astype(np.uint8) * 255
+    print(f"Found {len(image_files)} images in {input_dir}")
 
-    # ---- Find contours ----
-    contours, _ = cv2.findContours(
-        binary,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE
-    )
+    for filename in image_files:
+        img_path = os.path.join(input_dir, filename)
+        print(f"Processing {filename}...")
 
-    polygons = []
+        img = Image.open(img_path).convert("RGB")
+        _, _, pred_mask = run_model(img)
 
-    for cnt in contours:
-        if cv2.contourArea(cnt) < min_area:
-            continue
+        # Raw binary mask from model
+        binary = (pred_mask == 1).astype(np.uint8)
 
-        # ---- Simplify contour → polygon ----
-        epsilon = epsilon_ratio * cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, epsilon, True)
+        # Define kernels
+        small_kernel  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (10, 10))
+        medium_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
+        large_kernel  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
 
-        # (N,1,2) → (N,2)
-        pts = approx.squeeze(1)
+        # Apply different operations
+        operations = {
+            "0_raw":           binary,
+            "1_close_10":      cv2.morphologyEx(binary, cv2.MORPH_CLOSE, small_kernel),
+            "2_close_20":      cv2.morphologyEx(binary, cv2.MORPH_CLOSE, medium_kernel),
+            "3_close_30":      cv2.morphologyEx(binary, cv2.MORPH_CLOSE, large_kernel),
+            "4_erode2_dilate2": cv2.dilate(cv2.erode(binary, small_kernel, iterations=2), small_kernel, iterations=2),
+            "5_erode3_dilate3": cv2.dilate(cv2.erode(binary, small_kernel, iterations=3), small_kernel, iterations=3),
+        }
 
-        # Flatten → [x1, y1, x2, y2, ...]
-        poly = pts.flatten().tolist()
+        stem = os.path.splitext(filename)[0]
+        for name, mask in operations.items():
+            save_path = os.path.join(output_dir, f"{stem}_{name}.png")
+            Image.fromarray((mask * 255).astype(np.uint8)).save(save_path)
 
-        # Need at least 3 points (6 values)
-        if len(poly) >= 6:
-            polygons.append(poly)
+        print(f"  Saved {len(operations)} variants to {output_dir}")
 
-    return polygons
-
-
-
+    print("Done. Compare the images in morph_comparison/ to find the best operation.")
 # output_dir = "instance_crops"
 
 # def save_binary_mask(pred_mask, img_name, foreground_class=1):

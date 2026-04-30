@@ -13,36 +13,48 @@ import numpy as np
 from dataset import FickDataSet, AugmentedSubset
 
 
-## paths to the image files #########
+## paths to the split folders
+train_img_dir  = "cord-dataset/split/train/images"
+train_mask_dir = "cord-dataset/split/train/masks"
+test_img_dir   = "cord-dataset/split/test/images"
+test_mask_dir  = "cord-dataset/split/test/masks"
 
-img_dir  = "cord-dataset/images"
-mask_dir = "cord-dataset/masks"
+def load_pairs(img_dir, mask_dir):
+    img_paths, mask_paths = [], []
+    for f in sorted(os.listdir(img_dir)):
+        if not f.lower().endswith(".jpg"):
+            continue
+        base = os.path.splitext(f)[0]
+        mask_path = os.path.join(mask_dir, base + ".png")
+        if os.path.exists(mask_path):
+            img_paths.append(os.path.join(img_dir, f))
+            mask_paths.append(mask_path)
+        else:
+            print("Missing mask for:", f)
+    return img_paths, mask_paths
 
-## extracting file names to create a dataset ########
+# Fixed test set
+test_imgs, test_masks = load_pairs(test_img_dir, test_mask_dir)
+test_set = FickDataSet(img_paths=test_imgs, mask_paths=test_masks, img_tf=ToTensor())
 
-img_files = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(".jpg")])
+# Train folder → split into train/val
+all_imgs, all_masks = load_pairs(train_img_dir, train_mask_dir)
 
-img_paths, mask_paths = [], []
-for f in img_files:
-    case_no = os.path.splitext(f)[0]
-    mask_path = os.path.join(mask_dir, case_no + ".png")
-    if os.path.exists(mask_path):
-        img_paths.append(os.path.join(img_dir, f))
-        mask_paths.append(mask_path)
-    else:
-        print("Missing mask for:", f)
-
-# Stain Normalisation
-REFERENCE_IMAGE = img_paths[0] 
+REFERENCE_IMAGE = all_imgs[0]
 reference = np.array(Image.open(REFERENCE_IMAGE).convert("RGB"))
 
-# Create the dataset
-dataset = FickDataSet(
-    img_paths=img_paths,
-    mask_paths=mask_paths,
-    img_tf=ToTensor(),
-    reference=reference
-)
+full_train = FickDataSet(img_paths=all_imgs, mask_paths=all_masks,
+                         img_tf=ToTensor(), reference=reference)
+
+n       = len(full_train)
+n_val   = int(0.15 * n)
+n_train = n - n_val
+
+generator = torch.Generator().manual_seed(42)
+train_subset, val_set = random_split(full_train, [n_train, n_val], generator=generator)
+train_set = AugmentedSubset(train_subset)
+
+print(f"Train: {len(train_set)} | Val: {len(val_set)} | Test: {len(test_set)}")
 
 # Move to gpu
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -64,6 +76,7 @@ _dice_loss = smp.losses.DiceLoss(
     from_logits=True,   # our model outputs raw logits
     ignore_index=255,
 )
+
 def combined_loss(logits, targets):
     """Equal-weight sum of cross-entropy and soft Dice loss."""
     return 0.5 * _ce_loss(logits, targets) + 0.5 * _dice_loss(logits, targets)
@@ -132,15 +145,6 @@ def test_loop(test_dataloader, model):
     return mean_loss, mdice
 
 # ----------------------------------------------------------
-
-# Split into train / validation / test 
-n = len(dataset)
-n_train, n_val, n_test = int(0.7 * n), int(0.15 * n), int(0.15 * n)
-
-train_set, val_set, test_set = random_split(dataset, [n_train, n_val, n_test])
-
-train_set = AugmentedSubset(train_set)
-
 # Creating Dataloader
 train_dataloader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
 val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=False)

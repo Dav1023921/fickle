@@ -2,10 +2,6 @@ import torchvision.transforms as T
 import torch
 from myunet import make_model
 import numpy as np
-from dataset import color_map
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import cv2
 from myunet import make_model
 from PIL import Image
@@ -32,9 +28,9 @@ def run_model(img):
         probs = torch.sigmoid(logits)
 
     pred_mask = (probs > 0.5).squeeze().cpu().numpy().astype(np.uint8)
-    confidence_map = probs.squeeze().cpu().numpy() 
 
-    return img, logits, pred_mask, confidence_map
+
+    return img, logits, pred_mask
 
 # Returns a dictionary of instances with their bounding boxes coordinates and masks
 def semantic_to_instances(binary_mask, min_area=900):
@@ -111,44 +107,6 @@ def make_instance_crop(image, instance_mask, bbox, ignore_rgb=IGNORE_RGB):
 
     return padded, crop_size
 
-from io import BytesIO
-import base64
-
-def get_instance_confidence(confidence_map, instance_mask):
-    vessel_pixels = confidence_map[instance_mask == 1]
-    if len(vessel_pixels) == 0:
-        return 0.0
-    return float(vessel_pixels.mean())
-
-def get_instance_heatmap(confidence_map, instance_mask, bbox):
-    x1, y1, x2, y2 = bbox
-    h = y2 - y1
-    w = x2 - x1
-    crop_size = max(h, w)
-
-    # crop confidence map to bbox region
-    conf_crop = confidence_map[y1:y2, x1:x2]
-
-    # pad to square
-    heatmap = np.zeros((crop_size, crop_size), dtype=np.float32)
-    y_offset = (crop_size - h) // 2
-    x_offset = (crop_size - w) // 2
-    heatmap[y_offset:y_offset + h, x_offset:x_offset + w] = conf_crop
-
-    # mask out non-vessel pixels
-    mask_crop = instance_mask[y1:y2, x1:x2]
-    mask_padded = np.zeros((crop_size, crop_size), dtype=np.uint8)
-    mask_padded[y_offset:y_offset + h, x_offset:x_offset + w] = mask_crop
-    heatmap[mask_padded == 0] = 0
-
-    # convert to colour
-    heatmap_coloured = cm.jet(heatmap)[:, :, :3]
-    heatmap_uint8 = (heatmap_coloured * 255).astype(np.uint8)
-
-    img = Image.fromarray(heatmap_uint8)
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    return f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode('utf-8')}"
 
 # Compute relative morphologies
 def compute_relative_morphology(instances):
@@ -167,7 +125,7 @@ def compute_relative_morphology(instances):
 
     return instances
 
-def make_all_instance_crops(image, pred_mask, confidence_map, foreground_class=1, min_area=2000):
+def make_all_instance_crops(image, pred_mask, foreground_class=1, min_area=2000):
     #create a binary mask and run connected components to get instance masks and bboxes
     binary_mask = (pred_mask == foreground_class).astype(np.uint8)
     instances = semantic_to_instances(binary_mask, min_area=min_area)
@@ -182,8 +140,6 @@ def make_all_instance_crops(image, pred_mask, confidence_map, foreground_class=1
             ignore_rgb=IGNORE_RGB,
         )
         inst["crop"] = crop
-        inst["confidence"] = get_instance_confidence(confidence_map, inst["mask"])
-        inst["heatmap"] = get_instance_heatmap(confidence_map, inst["mask"], inst["bbox"])
 
     return instances
 
