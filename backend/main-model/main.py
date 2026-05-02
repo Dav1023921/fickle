@@ -46,7 +46,8 @@ stage3 = load_module("stage3_predict", os.path.join(BASE, "stage_3_classifier/pr
 
 
 def run_pipeline(image):
-    # this function will determine sua 
+    # vessel types consist of an array of strings, artery/vein, for a particular cord
+    # calculated from stage 3
     def predict_sua(vessel_types):
         counts = Counter(vessel_types)
         if counts["Artery"] == 1 and counts["Vein"] == 1:
@@ -83,7 +84,6 @@ def run_pipeline(image):
         # will contain ["artery", "artery", "vein"] or otherwise
         vessel_info = []
         vessel_types = []
-        vessel_confidences = []
         for v_instance in vessel_instances:
             ## Compute the polygon vectors ##############
             polygon = v_instance["polygon"]
@@ -97,33 +97,23 @@ def run_pipeline(image):
             vessel_type, confidence = stage3.predict_artery_vein(v_instance_feature)
             ############################################
             vessel_types.append(vessel_type)
+
             vessel_info.append({
                 "polygon": polygon_global,
                 "type": vessel_type,
                 "confidence": float(confidence),  
             })
-            vessel_confidences.append({
-                "vessel_seg_confidence": v_instance.get("confidence", 0.0),
-                "classification_confidence": float(confidence),
-            })
-        #############################################
-        # calculate per cord confidence
-        cord_seg_conf = c_instance.get("confidence", 0.0)
-        vessel_seg_conf = np.mean([v["vessel_seg_confidence"] for v in vessel_confidences]) if vessel_confidences else 0.0
-        classification_conf = np.mean([v["classification_confidence"] for v in vessel_confidences]) if vessel_confidences else 0.0
-        cord_confidence = round((cord_seg_conf * 0.4 + vessel_seg_conf * 0.35 + classification_conf * 0.25), 2)
-        #############################################
+
+
         polygons.append({
             "polygon": c_instance["polygon"],
             "diameter": c_instance["feret_diameter_px"],
             "start_end_points": (c_instance["feret_p1"], c_instance["feret_p2"]),
             "vessels": vessel_info,
-            "confidence": cord_confidence,
 
         })
         ## Make Diagnostic ##############################
         c_instance["diagnostic"] = predict_sua(vessel_types)
-        
         print(vessel_types)
     return cord_instances, polygons
 
@@ -145,16 +135,10 @@ def calculate_outputs(cord_instances, polygons):
             return most_common
         return "Uncertain"
         
-    def overall_confidence(polygons):
-        if not polygons:
-            return 0.0
-        return round(np.mean([p["confidence"] for p in polygons]), 2)
-
     #########################
     output["polygons"] = polygons
     output["number_of_cords"] = len(cord_instances)
     output["sua"] = diagnostic(cord_instances) == "SUA"
     output["diagnostic"] = diagnostic(cord_instances)
-    output["confidence"] = overall_confidence(polygons)
 
     return output

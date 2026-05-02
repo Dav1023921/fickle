@@ -1,36 +1,19 @@
 # This code will generate the training data for stage_3
-
-'''
-In particular stage 3 takes in Cord Image + Morphology Features
-
-The Morphology Features are: (Relative Area, Relative Perimeter, Relative Circularity, Relative Aspect Ratio)
-Cord Image into CNN
-
-Training Data Generation:
-For all the images with the same instance and picture number: 
-Calculate the morphology features on the training mask ground truth from the connected components.
-We will have to alter the connected components code to also return the morphology features with the components. 
-
-Will output two files features.npy and labels.npy
-'''
-
-
 from featureextractor import load_feature_extractor, get_combined_features
 from utilities import make_all_instance_crops_training, compute_relative_morphology
 import os
-import cv2
 import numpy as np
 from PIL import Image
 
 
 #### SAME AS CORDSEG BUT WITH DIFFERENT PATHS AND COLOR MAP
+
 color_map = {
     (0, 0, 0): 0, # Background
     (255,53,94) : 1, # Artery
     (53,21,212) : 2, # Vein
     (10, 10, 10): 0, # Ignore
 }
-
 
 def rgb_to_mask(mask_rgb):
     h, w, _ = mask_rgb.shape

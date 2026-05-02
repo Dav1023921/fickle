@@ -43,19 +43,16 @@ def get_morphology_vector(instance):
     """
     return np.array([
         instance["relative_perimeter"],
-        instance["relative_circularity"],
-        instance["relative_aspect_ratio"],
+        instance["circularity"],
+        instance["aspect_ratio"],
         instance["relative_area"],
         instance["num_vessels"]
     ], dtype=np.float32)
 
     
 
+_feature_extractor = load_feature_extractor()
 def get_combined_features(instance):
-    feature_extractor = load_feature_extractor()
-    """
-    Full pipeline: crop + instance dict → 520-dim feature vector
-    """
-    cnn_features = extract_cnn_features(instance["crop"], feature_extractor)
+    cnn_features = extract_cnn_features(instance["crop"], _feature_extractor)
     morphology = get_morphology_vector(instance)
     return np.concatenate([cnn_features, morphology])

@@ -10,7 +10,7 @@ model.load_model(model_path)
 scaler_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "morphology_scaler.pkl")
 scaler = joblib.load(scaler_path)
 
-def predict_artery_vein(feature_vector, threshold=0.6):
+def predict_artery_vein(feature_vector, threshold=0.7):
     feature_vector = feature_vector.copy()
     feature_vector[:, 512:] = scaler.transform(feature_vector[:, 512:])
 

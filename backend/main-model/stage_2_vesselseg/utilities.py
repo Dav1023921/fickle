@@ -130,8 +130,6 @@ def compute_relative_morphology(instances):
         inst["circularity"]  = inst["circularity"]
         inst["aspect_ratio"] = inst["aspect_ratio"]
 
-        # Number of cords in the image
-        inst["num_cords"] = len(instances)
 
     return instances
 
