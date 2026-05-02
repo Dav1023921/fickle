@@ -6,8 +6,7 @@ import { Box } from '@mui/material';
 import ToolPanel from '../components/CaseDetail/ToolPanel';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCases } from '../CasesContext';
-import type { CordPolygon, ReportedCounts } from '../CasesContext';
-import { exportCSV } from '../utils/exportCSV.ts';
+import type { CordInfo, ReportedCounts } from '../CasesContext';
 
 export default function CaseDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -21,7 +20,7 @@ export default function CaseDetailPage() {
     if (id) initCaseEdits(id);
   }, [id]);
 
-  const polygons: CordPolygon[] = currentCase?.edits?.polygons
+  const polygons: CordInfo[] = currentCase?.edits?.polygons
     ?? currentCase?.result?.polygons
     ?? [];
 
@@ -34,7 +33,7 @@ export default function CaseDetailPage() {
   const diagnosticOverride = currentCase?.edits?.diagnosticOverride ?? null;
   const reviewed = !!currentCase?.edits?.reviewedAt;
 
-  function handlePolygonsChange(updated: CordPolygon[]) {
+  function handlePolygonsChange(updated: CordInfo[]) {
     if (id) updateCaseEdits(id, { polygons: updated });
   }
 
@@ -43,7 +42,7 @@ export default function CaseDetailPage() {
   }
 
   function handleAddCord() {
-    const newCord: CordPolygon = { polygon: [], vessels: [], diameter: 0, confidence: 0 };
+    const newCord: CordInfo = { polygon: [], vessels: [], diameter: 0, confidence: 0 };
     const newPolygons = [...polygons, newCord];
     const newCounts   = [...reportedCounts, { arteries: 0, veins: 0 }];
     if (id) updateCaseEdits(id, { polygons: newPolygons, reportedCounts: newCounts });
@@ -81,12 +80,11 @@ export default function CaseDetailPage() {
           onPolygonsChange={handlePolygonsChange}
           onFeretChange={() => {}}
           onAddCord={(cord) => {
-            const newPolygons = [...polygons, cord];
             const newCounts   = [...reportedCounts, {
               arteries: cord.vessels.filter(v => v.type === 'Artery').length,
               veins:    cord.vessels.filter(v => v.type === 'Vein').length,
             }];
-            if (id) updateCaseEdits(id, { polygons: newPolygons, reportedCounts: newCounts });
+            if (id) updateCaseEdits(id, {reportedCounts: newCounts });
           }}
           />
         </Box>
@@ -114,12 +112,6 @@ export default function CaseDetailPage() {
             onMarkReviewed={handleMarkReviewed}
             onUnmarkReviewed={handleUnmarkReviewed}
             onGoBack={() => navigate('/')}
-            onGenerateReport={(diagnosis) => exportCSV(
-              currentCase?.filename ?? 'unknown',
-              diagnosis,
-              polygons,
-              reportedCounts,
-            )}
           />
         </Box>
 

@@ -46,25 +46,21 @@ def augment(img, mask):
     # Random vertical or horizontal flip
     if random.random() > 0.5:
         flip_no = random.choice([0, 1])  # 0: vertical, 1: horizontal
-
         if flip_no == 0:
             img  = F.vflip(img)
             mask = F.vflip(mask)
         else:
             img  = F.hflip(img)
             mask = F.hflip(mask)
-
     # Random 90 degree rotation
     if random.random() > 0.5:
         angle = random.choice([90, 180, 270])
         img  = F.rotate(img, angle)
         mask = F.rotate(mask.unsqueeze(0), angle).squeeze(0)  # add/remove channel dim
-
     # Colour jitter on image only
     if random.random() > 0.5:
         img = F.adjust_brightness(img, brightness_factor=random.uniform(0.8, 1.2))
         img = F.adjust_contrast(img,   contrast_factor=random.uniform(0.8, 1.2))
-
     return img, mask
 
 # A wrapper dataset that applies data augmentation specifically for the training data
@@ -112,16 +108,22 @@ class FickDataSet(Dataset):
 
         # Stain normalisation
         if self.reference is not None:
-            img_np = np.array(img)  # PIL to numpy
+            img_np = np.array(img)
+            # Convert both images to LAB colour space
             source_lab = cv2.cvtColor(img_np, cv2.COLOR_RGB2LAB).astype(float)
             target_lab = cv2.cvtColor(self.reference, cv2.COLOR_RGB2LAB).astype(float)
+
+            # Normalise each channel of the source to match the target's mean and std
             for i in range(3):
-                source_lab[:,:,i] = (source_lab[:,:,i] - source_lab[:,:,i].mean()) \
-                                / (source_lab[:,:,i].std() + 1e-6) \
-                                * target_lab[:,:,i].std() \
-                                + target_lab[:,:,i].mean()
-            img_np = cv2.cvtColor(np.clip(source_lab, 0, 255).astype(np.uint8), 
-                                cv2.COLOR_LAB2RGB)
+                source_mean, source_std = source_lab[:,:,i].mean(), source_lab[:,:,i].std()
+                target_mean, target_std = target_lab[:,:,i].mean(), target_lab[:,:,i].std()
+
+                source_lab[:,:,i] = (source_lab[:,:,i] - source_mean) / (source_std + 1e-6) \
+                                    * target_std + target_mean
+
+            # Convert back to RGB
+            source_lab = np.clip(source_lab, 0, 255).astype(np.uint8)
+            img_np = cv2.cvtColor(source_lab, cv2.COLOR_LAB2RGB)
             img = Image.fromarray(img_np)
 
 

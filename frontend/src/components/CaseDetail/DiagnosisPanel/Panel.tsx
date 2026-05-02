@@ -168,15 +168,15 @@ function CordCard({ index, cord, reported, isHovered, onReportedChange, onCordCh
           <Spinner label="Veins" color="#3b82f6" value={reported.veins}
             onChange={v => onReportedChange({ ...reported, veins: v })} />
             {/* Diameter — read from cord, shown as read-only */}
-          {cord.diameter > 0 && (
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mt={0.5}>
-              <Typography fontSize={12} color="text.secondary">Diameter</Typography>
-              <Stack direction="row" alignItems="center" gap={0.5}>
-                <Typography fontWeight={600} fontSize={13}>{Math.round(cord.diameter)}</Typography>
-                <Typography fontSize={11} color="text.disabled">px</Typography>
-              </Stack>
+        {cord.diameter > 0 && (
+          <Stack direction="row" alignItems="center" justifyContent="space-between" mt={0.5}>
+            <Typography fontSize={12} color="text.secondary">Diameter</Typography>
+            <Stack direction="row" alignItems="center" gap={0.5}>
+              <Typography fontWeight={600} fontSize={13}>{Math.round(cord.diameter)}</Typography>
+              <Typography fontSize={11} color="text.disabled">px</Typography>
             </Stack>
-          )}
+          </Stack>
+        )}
 
           <Select size="small" fullWidth value={activeDiag}
             onChange={e => onReportedChange({

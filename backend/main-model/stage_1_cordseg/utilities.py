@@ -12,7 +12,6 @@ IGNORE_RGB = (10, 10, 10)
 
 # Returns the original image, the raw model output (logits), and the predicted mask
 def run_model(img):
-
     # convert image to np array
     image_np = np.array(img)
 
@@ -56,7 +55,7 @@ def semantic_to_instances(binary_mask, min_area=900):
 
         if area < min_area:
             continue
-        
+
         # Get the mask for this particular instance
         instance_mask = (labels == label_id).astype(np.uint8)
 
@@ -67,7 +66,6 @@ def semantic_to_instances(binary_mask, min_area=900):
         # Calculate Morphology features
         perimeter = cv2.arcLength(cnt, True)
         area = cv2.contourArea(cnt)
-        circularity = float((4 * np.pi * area) / (perimeter ** 2)) if perimeter > 0 else 0.0
 
         # Calculate Feret diameter endpoints
         pts = cnt.squeeze()
@@ -92,10 +90,6 @@ def semantic_to_instances(binary_mask, min_area=900):
             "polygon": polygon,
             "width": int(w),
             "height": int(h),
-            # --- Morphology ---
-            "area": float(area),
-            "perimeter": float(perimeter),
-            "circularity": round(circularity, 4),
             # --- Feret Diameter
             "feret_diameter_px": round(feret_diameter, 2),
             "feret_p1": p1,
@@ -164,13 +158,13 @@ def make_all_instance_crops(image, pred_mask, foreground_class=1, min_area=2000)
     return instances
 
 
-# ─── main ─────────────────────────────────────────────────────────────────────
-# Runs the model on every image in cord-dataset/split/test/images and saves
+# ─── main ───
+# Runs the model on every image in cord-dataset/split/test/images and saves the prediction mask
 
 if __name__ == "__main__":
     base       = os.path.dirname(os.path.abspath(__file__))
     input_dir  = os.path.join(base, "cord-dataset", "split", "test", "images")
-    output_dir = os.path.join(base, "cord-dataset", "split", "test", "morph_comparison")
+    output_dir = os.path.join(base, "cord-dataset", "split", "test", "predictions")
     os.makedirs(output_dir, exist_ok=True)
 
     image_files = sorted([
@@ -187,32 +181,13 @@ if __name__ == "__main__":
         img = Image.open(img_path).convert("RGB")
         _, _, pred_mask = run_model(img)
 
-        # Raw binary mask from model
-        binary = (pred_mask == 1).astype(np.uint8)
-
-        # Define kernels
-        small_kernel  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (10, 10))
-        medium_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (20, 20))
-        large_kernel  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
-
-        # Apply different operations
-        operations = {
-            "0_raw":           binary,
-            "1_close_10":      cv2.morphologyEx(binary, cv2.MORPH_CLOSE, small_kernel),
-            "2_close_20":      cv2.morphologyEx(binary, cv2.MORPH_CLOSE, medium_kernel),
-            "3_close_30":      cv2.morphologyEx(binary, cv2.MORPH_CLOSE, large_kernel),
-            "4_erode2_dilate2": cv2.dilate(cv2.erode(binary, small_kernel, iterations=2), small_kernel, iterations=2),
-            "5_erode3_dilate3": cv2.dilate(cv2.erode(binary, small_kernel, iterations=3), small_kernel, iterations=3),
-        }
-
         stem = os.path.splitext(filename)[0]
-        for name, mask in operations.items():
-            save_path = os.path.join(output_dir, f"{stem}_{name}.png")
-            Image.fromarray((mask * 255).astype(np.uint8)).save(save_path)
+        save_path = os.path.join(output_dir, f"{stem}_pred.png")
+        Image.fromarray((pred_mask * 255).astype(np.uint8)).save(save_path)
+        print(f"  Saved prediction mask to {save_path}")
 
-        print(f"  Saved {len(operations)} variants to {output_dir}")
+    print("Done.")
 
-    print("Done. Compare the images in morph_comparison/ to find the best operation.")
 # output_dir = "instance_crops"
 
 # def save_binary_mask(pred_mask, img_name, foreground_class=1):

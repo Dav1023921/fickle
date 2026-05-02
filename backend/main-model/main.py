@@ -99,7 +99,6 @@ def run_pipeline(image):
             vessel_types.append(vessel_type)
             vessel_info.append({
                 "polygon": polygon_global,
-                "area": v_instance["area"],
                 "type": vessel_type,
                 "confidence": float(confidence),  
             })

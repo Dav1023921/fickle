@@ -6,20 +6,18 @@ import { Box, Button, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 import { toXY, toFlat, euclidean, farthestPair } from "./viewerUtils";
-import type { CordPolygon as Cord, VesselInfo as Vessel } from "../../../CasesContext";
+import type { CordPolygon as Cord} from "../../../CasesContext";
 
 const COLOUR_BLUE          = "#3b82f6";
 const COLOUR_RED           = "#ef4444";
 const COLOUR_YELLOW        = "#facc15";
 const COLOUR_CYAN          = "#00e5ff";
 const COLOUR_WHITE         = "#ffffff";
-const COLOUR_GREEN         = "#22c55e";
 
 const FILL_BLUE_FAINT      = "rgba(59,130,246,0.08)";
 const FILL_BLUE_VESSEL     = "rgba(59,130,246,0.12)";
 const FILL_RED_VESSEL      = "rgba(239,68,68,0.12)";
 const FILL_YELLOW_SELECTED = "rgba(250,204,21,0.10)";
-const FILL_GREEN_DRAFT     = "rgba(34,197,94,0.08)";
 
 const CONF_HIGH   = "#16a34a";
 const CONF_MED    = "#d97706";
@@ -312,7 +310,7 @@ type Props = {
   onAddCord?: (cord: Cord) => void;
 };
 
-function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPolygonsChange, onAddCord }: Props) {
+function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPolygonsChange}: Props) {
   const stageRef             = useRef<Konva.Stage | null>(null);
   const containerRef         = useRef<HTMLDivElement>(null);
   const blockNextCanvasClick = useRef(false);
@@ -334,10 +332,6 @@ function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPo
 
   const [feretOverrideCord,  setFeretOverrideCord]  = useState<number | null>(null);
   const [feretPickedIndices, setFeretPickedIndices] = useState<number[]>([]);
-
-  // ── drawing mode ──
-  const [drawingMode, setDrawingMode]   = useState(false);
-  const [draftPoints, setDraftPoints]   = useState<number[]>([]);
 
   const isPanning = useRef(false);
   const lastPos   = useRef({ x: 0, y: 0 });
@@ -418,7 +412,7 @@ function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPo
 
   function handleMouseUp() {
     isPanning.current = false;
-    if (stageRef.current) stageRef.current.container().style.cursor = drawingMode ? "crosshair" : "default";
+    if (stageRef.current) stageRef.current.container().style.cursor = "default";
   }
 
   function updateCords(updater: (prev: Cord[]) => Cord[]) {
@@ -451,35 +445,8 @@ function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPo
     );
   }
 
-  // ── drawing: click to place point, double-click to close polygon ──
-  function handleStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
-    if (!drawingMode) return;
-    if (e.target !== e.target.getStage()) return;
-    const pos = stageRef.current!.getRelativePointerPosition();
-    if (!pos) return;
-    setDraftPoints(prev => [...prev, pos.x, pos.y]);
-  }
-
-  function handleStageDblClick() {
-    if (!drawingMode || draftPoints.length < 6) return; // need at least 3 points
-    const pts = draftPoints;
-    const xy  = toXY(pts);
-    const [i1, i2] = farthestPair(pts);
-    const newCord: Cord = {
-      polygon: pts,
-      vessels: [],
-      diameter: euclidean(xy[i1], xy[i2]),
-      confidence: 0,
-      start_end_points: [[xy[i1].x, xy[i1].y], [xy[i2].x, xy[i2].y]],
-    };
-    onAddCord?.(newCord);
-    setDraftPoints([]);
-    setDrawingMode(false);
-    if (stageRef.current) stageRef.current.container().style.cursor = "default";
-  }
-
   function handleCordClick(cordIndex: number, screenX: number, screenY: number) {
-    if (feretOverrideCord !== null || drawingMode) return;
+    if (feretOverrideCord !== null) return;
     const rect = containerRef.current!.getBoundingClientRect();
     blockNextCanvasClick.current = true;
     setSelectedKey(`c${cordIndex}`);
@@ -489,7 +456,7 @@ function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPo
   }
 
   function handleVesselClick(cordIndex: number, vesselIndex: number, screenX: number, screenY: number) {
-    if (feretOverrideCord !== null || drawingMode) return;
+    if (feretOverrideCord !== null) return;
     const rect = containerRef.current!.getBoundingClientRect();
     blockNextCanvasClick.current = true;
     setSelectedKey(`c${cordIndex}v${vesselIndex}`);
@@ -506,7 +473,6 @@ function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPo
   }
 
   function handleFeretLineClick(cordIndex: number, screenX: number, screenY: number) {
-    if (drawingMode) return;
     const rect = containerRef.current!.getBoundingClientRect();
     blockNextCanvasClick.current = true;
     setFeretPopup({ x: screenX - rect.left, y: screenY - rect.top, cordIndex });
@@ -576,7 +542,6 @@ function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPo
 
   const flat        = flatten(cords);
   const strokeWidth = 2 / (fitScale * zoom);
-  const scale       = fitScale * zoom;
   const btn = { color: "white", borderColor: "#444", minWidth: 0 };
   const feretPickStep = feretOverrideCord !== null
     ? (feretPickedIndices.length === 0 ? 1 : 2)
@@ -611,34 +576,12 @@ function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPo
           {showPolygons ? "Hide Outlines" : "Show Outlines"}
         </Button>
 
-        <Box sx={{ width: "1px", height: 28, bgcolor: "#444", mx: 0.5 }} />
-
-        {/* Draw cord button */}
-        <Button size="small" variant="contained"
-          onClick={() => {
-            const next = !drawingMode;
-            setDrawingMode(next);
-            setDraftPoints([]);
-            if (stageRef.current)
-              stageRef.current.container().style.cursor = next ? "crosshair" : "default";
-          }}
-          sx={{
-            ...btn,
-            ...(drawingMode ? { bgcolor: COLOUR_GREEN, '&:hover': { bgcolor: '#16a34a' } } : {}),
-          }}>
-          {drawingMode ? "Cancel Draw" : "Draw Cord"}
-        </Button>
 
         <Box sx={{ flex: 1 }} />
-
         <Typography variant="caption" sx={{ color: "#EEE", fontSize: 14, mr: 1 }}>
-          {drawingMode
-            ? draftPoints.length < 6
-              ? "Click to place points · need at least 3"
-              : "Double-click to close polygon"
-            : editingCordIndex !== null || editingVesselKey !== null
-              ? "Drag points to reshape · Press Done when finished"
-              : "Click an outline to edit · Click the diameter line to adjust it"}
+          {editingCordIndex !== null || editingVesselKey !== null
+            ? "Drag points to reshape · Press Done when finished"
+            : "Click an outline to edit · Click the diameter line to adjust it"}
         </Typography>
 
         {(editingCordIndex !== null || editingVesselKey !== null) && (
@@ -671,14 +614,12 @@ function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPo
           ref={stageRef}
           width={dims.width}
           height={dims.height}
-          draggable={!drawingMode && editingCordIndex === null && editingVesselKey === null}
+          draggable={editingCordIndex === null && editingVesselKey === null}
           onWheel={handleWheel}
           dragBoundFunc={dragBounds}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onClick={handleStageClick}
-          onDblClick={handleStageDblClick}
         >
           <Layer listening={false}>
             <KonvaImage image={image} x={0} y={0} width={image.width} height={image.height} perfectDrawEnabled={false} />
@@ -729,28 +670,6 @@ function Viewer({ imageUrl, polygons = [], hoveredCordIndex, onFeretChange, onPo
             </Layer>
           )}
 
-          {/* Draft polygon being drawn */}
-          {drawingMode && draftPoints.length >= 2 && (
-            <Layer listening={false}>
-              <Line
-                points={draftPoints}
-                stroke={COLOUR_GREEN}
-                strokeWidth={strokeWidth * 1.5}
-                fill={FILL_GREEN_DRAFT}
-                closed={false}
-                dash={[strokeWidth * 4, strokeWidth * 2]}
-              />
-              {toXY(draftPoints).map((pt, i) => (
-                <Circle
-                  key={i}
-                  x={pt.x} y={pt.y}
-                  radius={4 / scale}
-                  fill={COLOUR_GREEN}
-                  opacity={0.9}
-                />
-              ))}
-            </Layer>
-          )}
         </Stage>
 
         {/* Vessel popup */}

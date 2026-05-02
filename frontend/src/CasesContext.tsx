@@ -4,12 +4,11 @@ import { createContext, useContext, useState } from 'react'
 
 export type VesselInfo = {
   polygon: number[];
-  area: number;
   type: string;
   confidence?: number;
 };
 
-export type CordPolygon = {
+export type CordInfo = {
   polygon: number[];
   vessels: VesselInfo[];
   diameter: number;
@@ -18,7 +17,7 @@ export type CordPolygon = {
 };
 
 export type PipelineResult = {
-  polygons: CordPolygon[];
+  polygons: CordInfo[];
   number_of_cords: number;
   sua: boolean;
   diagnostic: 'Normal' | 'SUA' | 'Uncertain';

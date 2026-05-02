@@ -93,7 +93,6 @@ def test_loop(test_dataloader, model):
 
 if __name__ == '__main__':
     ## paths to the image files #########
-    # Change the paths to relative paths (since your dataset is in the same project folder)
     img_dir  = "vessel-dataset/images"
     mask_dir = "vessel-dataset/masks"
 
@@ -149,9 +148,9 @@ if __name__ == '__main__':
     train_set, val_set, test_set = random_split(dataset, [n_train, n_val, n_test])
 
     # Creating Dataloader
-    train_dataloader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers = 3)
-    val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers = 3)
-    test_dataloader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers = 3)
+    train_dataloader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=3)
+    val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=3)
+    test_dataloader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=3)
 
     # Initialise an instance of the model
     model = make_model().to(device)
@@ -191,4 +190,3 @@ if __name__ == '__main__':
     torch.save(model.state_dict(), "unet_resnet34.pth")
 
     print("Done!")
-

@@ -20,7 +20,12 @@ def run_model(img):
     model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
     model.eval()
 
-    transform = T.Compose([T.ToTensor()])
+    transform = T.Compose([
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406], 
+                std=[0.229, 0.224, 0.225])
+    ])
+    
     x = transform(img).unsqueeze(0)
 
     with torch.no_grad():
@@ -112,16 +117,21 @@ def make_instance_crop(image, instance_mask, bbox, ignore_rgb=IGNORE_RGB):
 def compute_relative_morphology(instances):
     if len(instances) == 0:
         return instances
-
+    
     # Find the largest instance by area
     largest = max(instances, key=lambda x: x["area"])
 
     for inst in instances:
-        inst["relative_area"]         = inst["area"]         / largest["area"]         if largest["area"] > 0 else 0
-        inst["relative_perimeter"]    = inst["perimeter"]    / largest["perimeter"]    if largest["perimeter"] > 0 else 0
-        inst["relative_circularity"]  = inst["circularity"]  / largest["circularity"]  if largest["circularity"] > 0 else 0
-        inst["relative_aspect_ratio"] = inst["aspect_ratio"] / largest["aspect_ratio"] if largest["aspect_ratio"] > 0 else 0
-        inst["num_vessels"] = len(instances)
+        # Normalise size-dependent features relative to the largest instance
+        inst["relative_area"]      = inst["area"]      / largest["area"]      if largest["area"] > 0 else 0
+        inst["relative_perimeter"] = inst["perimeter"] / largest["perimeter"] if largest["perimeter"] > 0 else 0
+
+        # Circularity and aspect ratio are already dimensionless so keep as absolute values
+        inst["circularity"]  = inst["circularity"]
+        inst["aspect_ratio"] = inst["aspect_ratio"]
+
+        # Number of cords in the image
+        inst["num_cords"] = len(instances)
 
     return instances
 
